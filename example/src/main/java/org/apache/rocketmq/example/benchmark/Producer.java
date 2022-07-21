@@ -57,29 +57,48 @@ public class Producer {
             System.exit(-1);
         }
 
+        /*
+         *  提取测试的配置
+         */
+        // 投递的Topic （默认是BenchmarkTest）
         final String topic = commandLine.hasOption('t') ? commandLine.getOptionValue('t').trim() : "BenchmarkTest";
+        // 线程数 （默认64个线程）
         final int threadCount = commandLine.hasOption('w') ? Integer.parseInt(commandLine.getOptionValue('w')) : 64;
+        // 消息大小 （默认128个字符char）
         final int messageSize = commandLine.hasOption('s') ? Integer.parseInt(commandLine.getOptionValue('s')) : 128;
+
         final boolean keyEnable = commandLine.hasOption('k') && Boolean.parseBoolean(commandLine.getOptionValue('k'));
+
         final int propertySize = commandLine.hasOption('p') ? Integer.parseInt(commandLine.getOptionValue('p')) : 0;
         final int tagCount = commandLine.hasOption('l') ? Integer.parseInt(commandLine.getOptionValue('l')) : 0;
         final boolean msgTraceEnable = commandLine.hasOption('m') && Boolean.parseBoolean(commandLine.getOptionValue('m'));
         final boolean aclEnable = commandLine.hasOption('a') && Boolean.parseBoolean(commandLine.getOptionValue('a'));
+        // 要发送的消息数量（默认是0，也就是永远运行）
         final long messageNum = commandLine.hasOption('q') ? Long.parseLong(commandLine.getOptionValue('q')) : 0;
         final boolean delayEnable = commandLine.hasOption('d') && Boolean.parseBoolean(commandLine.getOptionValue('d'));
         final int delayLevel = commandLine.hasOption('e') ? Integer.parseInt(commandLine.getOptionValue('e')) : 1;
 
+        // 先打印出配置
         System.out.printf("topic: %s threadCount: %d messageSize: %d keyEnable: %s propertySize: %d tagCount: %d traceEnable: %s aclEnable: %s messageQuantity: %d%n delayEnable: %s%n delayLevel: %s%n",
             topic, threadCount, messageSize, keyEnable, propertySize, tagCount, msgTraceEnable, aclEnable, messageNum, delayEnable, delayLevel);
 
-        StringBuilder sb = new StringBuilder(messageSize);
+        StringBuilder sb = new StringBuilder(messageSize); // 底层是一个char数组
         for (int i = 0; i < messageSize; i++) {
+            // 随机填充字母或者数字  Alpha(字母)-numeric(数字)
             sb.append(RandomStringUtils.randomAlphanumeric(1));
         }
         msgBody = sb.toString().getBytes(StandardCharsets.UTF_8);
 
         final InternalLogger log = ClientLogger.getLog();
 
+        /*
+         * 创建了两个线程池 sendThreadPool 和 executorService
+         *
+         * sendThreadPool是用来'向RocketMQ投递消息'的
+         * executorService是定时用来打印'统计信息'的
+         *
+         */
+        // 创建线程池  注意：newFixedThreadPool创建的线程池用的是LinkedBlockingQueue无界队列
         final ExecutorService sendThreadPool = Executors.newFixedThreadPool(threadCount);
 
         final StatsBenchmarkProducer statsBenchmark = new StatsBenchmarkProducer();
@@ -91,6 +110,12 @@ public class Producer {
 
         final long[] msgNums = new long[threadCount];
 
+        /*
+         * 在这里规划好每个线程要发送的消息数。
+         * 不能被整除的，余出来的消息数统一都给到
+         *
+         *
+         */
         if (messageNum > 0) {
             Arrays.fill(msgNums, messageNum / threadCount);
             long mod = messageNum % threadCount;
@@ -99,6 +124,7 @@ public class Producer {
             }
         }
 
+        // 每秒采集一次信息
         executorService.scheduleAtFixedRate(new TimerTask() {
             @Override
             public void run() {
@@ -109,13 +135,13 @@ public class Producer {
             }
         }, 1000, 1000, TimeUnit.MILLISECONDS);
 
+        // 每10s打印一次统计信息(包含了计算过程)
         executorService.scheduleAtFixedRate(new TimerTask() {
             private void printStats() {
                 if (snapshotList.size() >= 10) {
                     doPrintStats(snapshotList,  statsBenchmark, false);
                 }
             }
-
             @Override
             public void run() {
                 try {
@@ -127,9 +153,15 @@ public class Producer {
         }, 10000, 10000, TimeUnit.MILLISECONDS);
 
         RPCHook rpcHook = aclEnable ? AclClient.getAclRPCHook() : null;
+        /*
+         * 注意：
+         * producer实例是线程安全的。
+         * 这个测试程序，假如默认使用64个线程。64个线程也是使用的同一个producer实例。
+         */
         final DefaultMQProducer producer = new DefaultMQProducer("benchmark_producer", rpcHook, msgTraceEnable, null);
         producer.setInstanceName(Long.toString(System.currentTimeMillis()));
 
+        // 设置 Name Sever地址
         if (commandLine.hasOption('n')) {
             String ns = commandLine.getOptionValue('n');
             producer.setNamesrvAddr(ns);
@@ -141,9 +173,8 @@ public class Producer {
 
         for (int i = 0; i < threadCount; i++) {
             final long msgNumLimit = msgNums[i];
-            if (messageNum > 0 && msgNumLimit == 0) {
-                break;
-            }
+            if (messageNum > 0 && msgNumLimit == 0) break;
+
             sendThreadPool.execute(new Runnable() {
                 @Override
                 public void run() {
@@ -151,13 +182,16 @@ public class Producer {
                     while (true) {
                         try {
                             final Message msg = buildMessage(topic);
+                            // 单条消息---发送开始时间戳
                             final long beginTimestamp = System.currentTimeMillis();
                             if (keyEnable) {
                                 msg.setKeys(String.valueOf(beginTimestamp / 1000));
                             }
+                            // 设置延迟级别
                             if (delayEnable) {
                                 msg.setDelayTimeLevel(delayLevel);
                             }
+                            // 设置tag
                             if (tagCount > 0) {
                                 msg.setTags(String.format("tag%d", System.currentTimeMillis() % tagCount));
                             }
@@ -185,6 +219,7 @@ public class Producer {
                             statsBenchmark.getSendRequestSuccessCount().increment();
                             statsBenchmark.getReceiveResponseSuccessCount().increment();
                             final long currentRT = System.currentTimeMillis() - beginTimestamp;
+                            // 发送成功的总RT加上当前发送成功的RT
                             statsBenchmark.getSendMessageSuccessTimeTotal().add(currentRT);
                             long prevMaxRT = statsBenchmark.getSendMessageMaxRT().longValue();
                             while (currentRT > prevMaxRT) {
@@ -219,6 +254,7 @@ public class Producer {
                             } catch (InterruptedException ignored) {
                             }
                         }
+                        // 如果线程发送的消息数量到了数量上限，就跳出循环，
                         if (messageNum > 0 && ++num >= msgNumLimit) {
                             break;
                         }
@@ -248,6 +284,9 @@ public class Producer {
         }
     }
 
+    /**
+     * 每个选项option的意义，都在这里写着了
+     */
     public static Options buildCommandlineOptions(final Options options) {
         Option opt = new Option("w", "threadCount", true, "Thread count, Default: 64");
         opt.setRequired(false);
@@ -296,9 +335,17 @@ public class Producer {
         return new Message(topic, msgBody);
     }
 
+    /**
+     *
+     * 打印统计信息
+     *
+     * @param snapshotList
+     * @param statsBenchmark
+     * @param done 测试是否已完成
+     */
     private static void doPrintStats(final LinkedList<Long[]> snapshotList, final StatsBenchmarkProducer statsBenchmark, boolean done) {
-        Long[] begin = snapshotList.getFirst();
-        Long[] end = snapshotList.getLast();
+        Long[] begin = snapshotList.getFirst();     // 最早的一次快照
+        Long[] end = snapshotList.getLast();        // 最后的一次快照
 
         final long sendTps = (long) (((end[3] - begin[3]) / (double) (end[0] - begin[0])) * 1000L);
         final double averageRT = (end[5] - begin[5]) / (double) (end[3] - begin[3]);
@@ -329,12 +376,12 @@ class StatsBenchmarkProducer {
 
     public Long[] createSnapshot() {
         Long[] snap = new Long[] {
-            System.currentTimeMillis(),
-            this.sendRequestSuccessCount.longValue(),
-            this.sendRequestFailedCount.longValue(),
-            this.receiveResponseSuccessCount.longValue(),
-            this.receiveResponseFailedCount.longValue(),
-            this.sendMessageSuccessTimeTotal.longValue(),
+            System.currentTimeMillis(),                     // [0] long型时间戳
+            this.sendRequestSuccessCount.longValue(),       // [1]
+            this.sendRequestFailedCount.longValue(),        // [2] client发送失败的次数
+            this.receiveResponseSuccessCount.longValue(),   // [3] broker成功接收到的总数量
+            this.receiveResponseFailedCount.longValue(),    // [4] broker接受异常的次数
+            this.sendMessageSuccessTimeTotal.longValue(),   // [5] 所有发送的总RT
         };
 
         return snap;
