@@ -28,6 +28,9 @@ import org.apache.rocketmq.logging.InternalLoggerFactory;
 import org.apache.rocketmq.remoting.netty.RequestTask;
 import org.apache.rocketmq.remoting.protocol.RemotingSysResponseCode;
 
+/**
+ * Broker的快速失败机制
+ */
 public class BrokerFastFailure {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.BROKER_LOGGER_NAME);
     private final ScheduledExecutorService scheduledExecutorService = Executors.newSingleThreadScheduledExecutor(new ThreadFactoryImpl(
@@ -52,6 +55,7 @@ public class BrokerFastFailure {
     }
 
     public void start() {
+        // 用一个线程池，每10毫秒去清空一次超时的请求（所谓的请求是对于RequestController来说的）（是否做这个动作是可以配置的）
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
             @Override
             public void run() {
@@ -79,7 +83,7 @@ public class BrokerFastFailure {
             } catch (Throwable ignored) {
             }
         }
-
+        // 清除超时的消息Message发送请求，默认200毫秒超时
         cleanExpiredRequestInQueue(this.brokerController.getSendThreadPoolQueue(),
             this.brokerController.getBrokerConfig().getWaitTimeMillsInSendQueue());
 
@@ -97,6 +101,7 @@ public class BrokerFastFailure {
         while (true) {
             try {
                 if (!blockingQueue.isEmpty()) {
+                    // 获取blockingQueue的第一个任务，也就是最老的任务。
                     final Runnable runnable = blockingQueue.peek();
                     if (null == runnable) {
                         break;
@@ -107,10 +112,16 @@ public class BrokerFastFailure {
                     }
 
                     final long behind = System.currentTimeMillis() - rt.getCreateTimestamp();
+                    // 如果最老的任务都超过了最大等待时间
                     if (behind >= maxWaitTimeMillsInQueue) {
+                        // 那么就删除，不执行了
                         if (blockingQueue.remove(runnable)) {
                             rt.setStopRun(true);
-                            rt.returnResponse(RemotingSysResponseCode.SYSTEM_BUSY, String.format("[TIMEOUT_CLEAN_QUEUE]broker busy, start flow control for a while, period in queue: %sms, size of queue: %d", behind, blockingQueue.size()));
+                            // 如果任务队列中的最老任务等待时间都超过了预期，说明Broker需要做流控(flow control)了。
+                            // 需要拒绝执行一些任务了。所以，这里终止执行任务，也给客户端返回了一些任务队列的信息。
+                            rt.returnResponse(RemotingSysResponseCode.SYSTEM_BUSY,
+                                    String.format("[TIMEOUT_CLEAN_QUEUE]broker busy, start flow control for a while, " +
+                                            "period in queue: %sms, size of queue: %d", behind, blockingQueue.size()));
                         }
                     } else {
                         break;
