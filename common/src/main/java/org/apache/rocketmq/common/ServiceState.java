@@ -16,6 +16,11 @@
  */
 package org.apache.rocketmq.common;
 
+/**
+ *
+ * 组件的生命周期
+ *
+ */
 public enum ServiceState {
     /**
      * Service just created,not start
