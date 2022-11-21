@@ -32,6 +32,7 @@ import org.apache.rocketmq.logging.InternalLoggerFactory;
 public class StoreStatsService extends ServiceThread {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
 
+    // 采样频率
     private static final int FREQUENCY_OF_SAMPLING = 1000;
 
     private static final int MAX_RECORDS_OF_SAMPLING = 60 * 10;
@@ -453,7 +454,7 @@ public class StoreStatsService extends ServiceThread {
                 this.waitForRunning(FREQUENCY_OF_SAMPLING);
 
                 this.sampling();
-
+                // 按照固定频率打印日志，显示存储情况
                 this.printTps();
             } catch (Exception e) {
                 log.warn(this.getServiceName() + " service has exception. ", e);
@@ -500,6 +501,7 @@ public class StoreStatsService extends ServiceThread {
     }
 
     private void printTps() {
+        // 每分钟打印一次
         if (System.currentTimeMillis() > (this.lastPrintTimestamp + printTPSInterval * 1000)) {
             this.lastPrintTimestamp = System.currentTimeMillis();
 
