@@ -211,8 +211,8 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
                         ch.pipeline()
                             .addLast(defaultEventExecutorGroup, HANDSHAKE_HANDLER_NAME, handshakeHandler)
                             .addLast(defaultEventExecutorGroup,
-                                encoder,
-                                new NettyDecoder(),
+                                encoder,            // 编码器，将RemotingCommand对象变为字节数据
+                                new NettyDecoder(), // 解码器，在这里将数据反序列化为RemotingCommand对象
                                 new IdleStateHandler(0, 0, nettyServerConfig.getServerChannelMaxIdleTimeSeconds()),
                                 connectionManageHandler,
                                 serverHandler
@@ -412,6 +412,11 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
         }
     }
 
+    /**
+     * ！！！！！！！！！！！！！处理接收到的MQ消息的入口 ！！！！！！！！！！！！！！！
+     * 但上层肯定是经过反序列化的
+     *
+     */
     @ChannelHandler.Sharable
     class NettyServerHandler extends SimpleChannelInboundHandler<RemotingCommand> {
 

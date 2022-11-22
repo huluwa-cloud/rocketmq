@@ -136,7 +136,7 @@ public abstract class NettyRemotingAbstract {
 
     /**
      * Entry of incoming command processing.
-     *
+     * 接收到的command处理入口
      * <p>
      * <strong>Note:</strong>
      * The incoming remoting command may be
@@ -195,6 +195,7 @@ public abstract class NettyRemotingAbstract {
         final int opaque = cmd.getOpaque();
 
         if (pair != null) {
+            // 这里的run就是交给线程池跑的任务
             Runnable run = new Runnable() {
                 @Override
                 public void run() {
@@ -221,10 +222,14 @@ public abstract class NettyRemotingAbstract {
                                 }
                             }
                         };
+
+                        // 异步
                         if (pair.getObject1() instanceof AsyncNettyRequestProcessor) {
                             AsyncNettyRequestProcessor processor = (AsyncNettyRequestProcessor)pair.getObject1();
                             processor.asyncProcessRequest(ctx, cmd, callback);
-                        } else {
+                        }
+                        // 同步
+                        else {
                             NettyRequestProcessor processor = pair.getObject1();
                             RemotingCommand response = processor.processRequest(ctx, cmd);
                             callback.callback(response);
@@ -253,8 +258,13 @@ public abstract class NettyRemotingAbstract {
 
             try {
                 final RequestTask requestTask = new RequestTask(run, ctx.channel(), cmd);
+                /*
+                 *
+                 * pair的getObject2拿出来的就是线程池，这里把任务提交给线程池
+                 *
+                 */
                 pair.getObject2().submit(requestTask);
-            } catch (RejectedExecutionException e) {
+            } catch (RejectedExecutionException e) {    // 线程池开始拒绝执行
                 if ((System.currentTimeMillis() % 10000) == 0) {
                     log.warn(RemotingHelper.parseChannelRemoteAddr(ctx.channel())
                         + ", too many requests and system thread pool busy, RejectedExecutionException "
@@ -262,7 +272,7 @@ public abstract class NettyRemotingAbstract {
                         + " request code: " + cmd.getCode());
                 }
 
-                if (!cmd.isOnewayRPC()) {
+                if (!cmd.isOnewayRPC()) {   // 如果不是oneway调用，那么就需要给客户端回ACK
                     final RemotingCommand response = RemotingCommand.createResponseCommand(RemotingSysResponseCode.SYSTEM_BUSY,
                         "[OVERLOAD]system busy, start flow control for a while");
                     response.setOpaque(opaque);
@@ -270,6 +280,9 @@ public abstract class NettyRemotingAbstract {
                 }
             }
         } else {
+            // 找不到对应的pair，就是不支持请求的类型。（没有找到处理这个请求任务的线程池）
+
+            // 那就拼一个协议对象RemotingCommand，写回给客户端
             String error = " request type " + cmd.getCode() + " not supported";
             final RemotingCommand response =
                 RemotingCommand.createResponseCommand(RemotingSysResponseCode.REQUEST_CODE_NOT_SUPPORTED, error);
