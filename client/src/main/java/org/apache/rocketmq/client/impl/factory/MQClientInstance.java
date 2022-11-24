@@ -97,6 +97,9 @@ public class MQClientInstance {
     private final NettyClientConfig nettyClientConfig;
     private final MQClientAPIImpl mQClientAPIImpl;
     private final MQAdminImpl mQAdminImpl;
+    /**
+     * Client端的路由信息，数据结构
+     */
     private final ConcurrentMap<String/* Topic */, TopicRouteData> topicRouteTable = new ConcurrentHashMap<String, TopicRouteData>();
     private final Lock lockNamesrv = new ReentrantLock();
     private final Lock lockHeartbeat = new ReentrantLock();
@@ -267,11 +270,14 @@ public class MQClientInstance {
             }, 1000 * 10, 1000 * 60 * 2, TimeUnit.MILLISECONDS);
         }
 
+        // Client端，启动的时候，默认每30s，从Name Server拉取topic信息，并更新本地缓存
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
             @Override
             public void run() {
                 try {
+                    // [类名.this.方法]的写法是为了访问外部类的方法。
+                    // 其实，不加类名.this.方法，也能编译通过。
                     MQClientInstance.this.updateTopicRouteInfoFromNameServer();
                 } catch (Exception e) {
                     log.error("ScheduledTask updateTopicRouteInfoFromNameServer exception", e);
@@ -638,6 +644,7 @@ public class MQClientInstance {
                             }
 
                             // Update Pub info
+                            // 更新发布信息
                             {
                                 TopicPublishInfo publishInfo = topicRouteData2TopicPublishInfo(topic, topicRouteData);
                                 publishInfo.setHaveTopicRouterInfo(true);
@@ -652,6 +659,7 @@ public class MQClientInstance {
                             }
 
                             // Update sub info
+                            // 更新订阅信息
                             {
                                 Set<MessageQueue> subscribeInfo = topicRouteData2TopicSubscribeInfo(topic, topicRouteData);
                                 Iterator<Entry<String, MQConsumerInner>> it = this.consumerTable.entrySet().iterator();
