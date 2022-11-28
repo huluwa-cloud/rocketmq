@@ -36,6 +36,9 @@ public class ClientConfig {
     public static final String SEND_MESSAGE_WITH_VIP_CHANNEL_PROPERTY = "com.rocketmq.sendMessageWithVIPChannel";
     private String namesrvAddr = NameServerAddressUtils.getNameServerAddresses();
     private String clientIP = RemotingUtil.getLocalAddress();
+    /**
+     * 如果不指定instanceName，默认就是DEFAULT
+     */
     private String instanceName = System.getProperty("rocketmq.client.name", "DEFAULT");
     private int clientCallbackExecutorThreads = Runtime.getRuntime().availableProcessors();
     protected String namespace;
@@ -64,6 +67,12 @@ public class ClientConfig {
 
     private LanguageCode language = LanguageCode.JAVA;
 
+    /**
+     *
+     * 不管是Producer还是Consumer，clientId都是[IP+实例名（Instance Name）]
+     * 生产的样例 ：10.32.7.1@COMMENT_MESSAGE_SAVE_CONSUMER_INSTANCE
+     *
+     */
     public String buildMQClientId() {
         StringBuilder sb = new StringBuilder();
         sb.append(this.getClientIP());

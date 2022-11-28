@@ -98,7 +98,8 @@ public class MQClientInstance {
     private final MQClientAPIImpl mQClientAPIImpl;
     private final MQAdminImpl mQAdminImpl;
     /**
-     * Client端的路由信息，数据结构
+     * Client端的路由信息，数据结构。
+     * 每个Client实例，都有自己的topic路由表
      */
     private final ConcurrentMap<String/* Topic */, TopicRouteData> topicRouteTable = new ConcurrentHashMap<String, TopicRouteData>();
     private final Lock lockNamesrv = new ReentrantLock();
@@ -107,6 +108,11 @@ public class MQClientInstance {
         new ConcurrentHashMap<String, HashMap<Long, String>>();
     private final ConcurrentMap<String/* Broker Name */, HashMap<String/* address */, Integer>> brokerVersionTable =
         new ConcurrentHashMap<String, HashMap<String, Integer>>();
+    /**
+     * 执行Client端定时任务的线程池是单线程的。
+     * 创建Client实例（MQClientInstance）的时候，就创建了这个线程池。
+     * 每个Client实例，都有自己的一个单线程的线程池。
+     */
     private final ScheduledExecutorService scheduledExecutorService = Executors.newSingleThreadScheduledExecutor(new ThreadFactory() {
         @Override
         public Thread newThread(Runnable r) {
@@ -119,6 +125,9 @@ public class MQClientInstance {
     private final DefaultMQProducer defaultMQProducer;
     private final ConsumerStatsManager consumerStatsManager;
     private final AtomicLong sendHeartbeatTimesTotal = new AtomicLong(0);
+    /**
+     * Client端的状态机
+     */
     private ServiceState serviceState = ServiceState.CREATE_JUST;
     private Random random = new Random();
 
@@ -225,7 +234,7 @@ public class MQClientInstance {
     }
 
     public void start() throws MQClientException {
-
+        // 因为一个MQClientInstance的start方法可能会被多个Producer或者Consumer调用，所以，需要加锁。
         synchronized (this) {
             switch (this.serviceState) {
                 case CREATE_JUST:
@@ -236,8 +245,11 @@ public class MQClientInstance {
                     }
                     // Start request-response channel
                     this.mQClientAPIImpl.start();
+
                     // Start various schedule tasks
+                    // 在这里，启动一堆定时任务（由一个单线程线程池）执行。
                     this.startScheduledTask();
+
                     // Start pull service
                     this.pullMessageService.start();
                     // Start rebalance service
@@ -245,6 +257,8 @@ public class MQClientInstance {
                     // Start push service
                     this.defaultMQProducer.getDefaultMQProducerImpl().start(false);
                     log.info("the client factory [{}] start OK", this.clientId);
+
+                    // 启动成功就修改状态机的状态
                     this.serviceState = ServiceState.RUNNING;
                     break;
                 case START_FAILED:
