@@ -22,12 +22,24 @@ import org.apache.rocketmq.common.constant.LoggerName;
 import org.apache.rocketmq.logging.InternalLogger;
 import org.apache.rocketmq.logging.InternalLoggerFactory;
 
+/**
+ * 在RocketMQ源码中，但凡叫XXXXService，都是一个线程和任务的结合体，或者直接认为是一个负责某种职责的线程。
+ * 逻辑在具体实现类的run方法中。
+ *
+ * 看start方法就知道了。
+ *
+ */
 public abstract class ServiceThread implements Runnable {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.COMMON_LOGGER_NAME);
 
     private static final long JOIN_TIME = 90 * 1000;
 
     private Thread thread;
+    /**
+     *
+     * 利用自定义的CountDownLatch做线程间的通信
+     *
+     */
     protected final CountDownLatch2 waitPoint = new CountDownLatch2(1);
     protected volatile AtomicBoolean hasNotified = new AtomicBoolean(false);
     protected volatile boolean stopped = false;
@@ -40,6 +52,9 @@ public abstract class ServiceThread implements Runnable {
 
     }
 
+    /**
+     * 钩子方法
+     */
     public abstract String getServiceName();
 
     public void start() {
@@ -48,8 +63,16 @@ public abstract class ServiceThread implements Runnable {
             return;
         }
         stopped = false;
+        /**
+         * 用子类定义的名字，创建一个新的线程。
+         */
         this.thread = new Thread(this, getServiceName());
         this.thread.setDaemon(isDaemon);
+        /**
+         *
+         * 创建线程后，直接启动线程
+         *
+         */
         this.thread.start();
     }
 
