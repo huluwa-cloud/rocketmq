@@ -55,6 +55,15 @@ public class BrokerStartup {
     public static InternalLogger log;
 
     public static void main(String[] args) {
+
+        /*
+         * 这个方法蕴含了两个阶段：
+         *
+         * 1）createBrokerController是做了Broker初始化的操作。
+         *
+         * 2）start是做了服务启动，开始接受请求了。
+         *
+         */
         start(createBrokerController(args));
     }
 
@@ -218,7 +227,11 @@ public class BrokerStartup {
                 messageStoreConfig);
             // remember all configs to prevent discard
             controller.getConfiguration().registerConfig(properties);
-
+            /**
+             *
+             * BrokerController的初始化
+             *
+             */
             boolean initResult = controller.initialize();
             if (!initResult) {
                 controller.shutdown();
