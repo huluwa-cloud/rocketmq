@@ -42,17 +42,40 @@ import org.apache.rocketmq.store.config.FlushDiskType;
 import org.apache.rocketmq.store.util.LibC;
 import sun.nio.ch.DirectBuffer;
 
+/**
+ * RocketMQ用了mmap
+ * 然后自定义了一个MappedFile类/对象，映射和对应磁盘上的文件。
+ *
+ * MappedFile，用于 [包括但不限于 CommitLog 和 ConsumerQueue]
+ *
+ */
 public class MappedFile extends ReferenceResource {
+    // 系统页大小：4K
     public static final int OS_PAGE_SIZE = 1024 * 4;
     protected static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
 
+    /**
+     * 类变量，全局使用
+     */
     private static final AtomicLong TOTAL_MAPPED_VIRTUAL_MEMORY = new AtomicLong(0);
 
+    /**
+     * 类变量，全局使用
+     */
     private static final AtomicInteger TOTAL_MAPPED_FILES = new AtomicInteger(0);
+    /**
+     *
+     * 写指针，使用原子类
+     * 因为 共享变量 多线程访问，不加锁，那就是 [cas+自旋].
+     *
+     */
     protected final AtomicInteger wrotePosition = new AtomicInteger(0);
     protected final AtomicInteger committedPosition = new AtomicInteger(0);
     private final AtomicInteger flushedPosition = new AtomicInteger(0);
     protected int fileSize;
+    /**
+     * 对应文件的FileChannel
+     */
     protected FileChannel fileChannel;
     /**
      * Message will put to here first, and then reput to FileChannel if writeBuffer is not null.
@@ -78,6 +101,9 @@ public class MappedFile extends ReferenceResource {
         init(fileName, fileSize, transientStorePool);
     }
 
+    /**
+     * 确保某个目录存在，不存在就创建。
+     */
     public static void ensureDirOK(final String dirName) {
         if (dirName != null) {
             File f = new File(dirName);
@@ -94,6 +120,9 @@ public class MappedFile extends ReferenceResource {
         invoke(invoke(viewed(buffer), "cleaner"), "clean");
     }
 
+    /**
+     *
+     */
     private static Object invoke(final Object target, final String methodName, final Class<?>... args) {
         return AccessController.doPrivileged(new PrivilegedAction<Object>() {
             public Object run() {
@@ -159,10 +188,28 @@ public class MappedFile extends ReferenceResource {
         ensureDirOK(this.file.getParent());
 
         try {
+            /**
+             * 注意：在这里的时候，文件是已经创建好了。
+             *
+             * 为什么用这种方式来创建FileChannel，不用FileChannel.open.
+             * 我觉得是因为，它为了兼容JDK6.
+             * FileChannel.open静态工厂方法，JDK 7才出。
+             */
             this.fileChannel = new RandomAccessFile(this.file, "rw").getChannel();
+            /**
+             *
+             * 这里用了mmap（Memory Map 内存映射）
+             * 所以，映射出来的Buffer大小是和文件大小一样的，fileSize
+             */
             this.mappedByteBuffer = this.fileChannel.map(MapMode.READ_WRITE, 0, fileSize);
+            /**
+             * 注意：TOTAL_MAPPED_VIRTUAL_MEMORY 和 TOTAL_MAPPED_FILES是类变量。
+             * 同时也是原子变量。
+             * 为的就是统计，JVM中，mmap了总共多少虚拟内存，多个文件。
+             */
             TOTAL_MAPPED_VIRTUAL_MEMORY.addAndGet(fileSize);
             TOTAL_MAPPED_FILES.incrementAndGet();
+
             ok = true;
         } catch (FileNotFoundException e) {
             log.error("Failed to create file " + this.fileName, e);
@@ -211,14 +258,14 @@ public class MappedFile extends ReferenceResource {
             byteBuffer.position(currentPos);
             AppendMessageResult result;
             if (messageExt instanceof MessageExtBrokerInner) {
-                result = cb.doAppend(this.getFileFromOffset(), byteBuffer, this.fileSize - currentPos,
-                        (MessageExtBrokerInner) messageExt, putMessageContext);
+                // MessageExtBrokerInner是MessageExt的子类
+                result = cb.doAppend(this.getFileFromOffset(), byteBuffer, this.fileSize - currentPos, (MessageExtBrokerInner) messageExt, putMessageContext);
             } else if (messageExt instanceof MessageExtBatch) {
-                result = cb.doAppend(this.getFileFromOffset(), byteBuffer, this.fileSize - currentPos,
-                        (MessageExtBatch) messageExt, putMessageContext);
+                result = cb.doAppend(this.getFileFromOffset(), byteBuffer, this.fileSize - currentPos, (MessageExtBatch) messageExt, putMessageContext);
             } else {
                 return new AppendMessageResult(AppendMessageStatus.UNKNOWN_ERROR);
             }
+            // 写入了多少字节到mmap（文件），那就将写指针前推多少字节
             this.wrotePosition.addAndGet(result.getWroteBytes());
             this.storeTimestamp = result.getStoreTimestamp();
             return result;
