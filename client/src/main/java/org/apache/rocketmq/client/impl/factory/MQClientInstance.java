@@ -243,7 +243,14 @@ public class MQClientInstance {
                     if (null == this.clientConfig.getNamesrvAddr()) {
                         this.mQClientAPIImpl.fetchNameServerAddr();
                     }
+
                     // Start request-response channel
+                    // 注意这里并没有创建和Broker端的连接，它里面只是配置了Netty的Bootstrap（不是ServerBootstrap）。
+                    // ServerBootstrap是Broker端才用的。
+                    /*
+                     * 这里的start，是不会建立Channel的，只是做好配置而已。
+                     * 像producer，在第一次发送的时候，才会去跟broker建立连接。
+                     */
                     this.mQClientAPIImpl.start();
 
                     // Start various schedule tasks

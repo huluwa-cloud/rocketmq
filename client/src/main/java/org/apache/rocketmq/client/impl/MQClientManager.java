@@ -31,6 +31,10 @@ import org.apache.rocketmq.remoting.RPCHook;
  * 一个JVM中，Rocket的所有Client（包括Producer和Consumer）都归 MQClientManager 管理。由它统一创建底层的MQClientInstance。
  *
  * 它是单例的。
+ * 一个JVM中，只会有一个MQClientManager。
+ * 一个MQClientManager（单例）下可以有多个MQClientInstance，用实例名区分（其实主要是网卡IP），一般其实只有一个。
+ * 一个MQClientInstance下可以有多个Producer、Consumer，用Group来区分。
+ *
  */
 public class MQClientManager {
     private final static InternalLogger log = ClientLogger.getLog();
