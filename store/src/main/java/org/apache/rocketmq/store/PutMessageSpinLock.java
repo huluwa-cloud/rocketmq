@@ -20,6 +20,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Spin lock Implementation to put message, suggest using this with low race conditions
+ *
+ * 果然，自旋锁的实现方式，和我设想的一样。
+ * 核心就是：用一个原子变量作为锁标识。
  */
 public class PutMessageSpinLock implements PutMessageLock {
     //true: Can lock, false : in lock.
