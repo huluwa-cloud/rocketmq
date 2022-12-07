@@ -120,6 +120,21 @@ public class DefaultMessageStore implements MessageStore {
     private final ScheduledExecutorService diskCheckScheduledExecutorService =
             Executors.newSingleThreadScheduledExecutor(new ThreadFactoryImpl("DiskCheckScheduledThread"));
 
+    /**
+     *
+     * 调用链：
+     * [org.apache.rocketmq.broker.BrokerStartup#main(java.lang.String[]) main方法] -->
+     * [org.apache.rocketmq.broker.BrokerStartup#start(org.apache.rocketmq.broker.BrokerController)] -->
+     * [org.apache.rocketmq.broker.BrokerStartup#createBrokerController(java.lang.String[])] -->
+     * [org.apache.rocketmq.broker.BrokerController#initialize()] -->
+     * [org.apache.rocketmq.store.DefaultMessageStore#DefaultMessageStore() 本方法]
+     *
+     * @param messageStoreConfig
+     * @param brokerStatsManager
+     * @param messageArrivingListener
+     * @param brokerConfig
+     * @throws IOException
+     */
     public DefaultMessageStore(final MessageStoreConfig messageStoreConfig, final BrokerStatsManager brokerStatsManager,
         final MessageArrivingListener messageArrivingListener, final BrokerConfig brokerConfig) throws IOException {
         this.messageArrivingListener = messageArrivingListener;
@@ -150,6 +165,11 @@ public class DefaultMessageStore implements MessageStore {
 
         this.transientStorePool = new TransientStorePool(messageStoreConfig);
 
+        /**
+         *
+         * 如果启用了 TransientStorePool，那么就进行初始化。
+         * 其实就是，分配了很多直接内存
+         */
         if (messageStoreConfig.isTransientStorePoolEnable()) {
             this.transientStorePool.init();
         }
@@ -181,26 +201,57 @@ public class DefaultMessageStore implements MessageStore {
 
     /**
      * @throws IOException
+     *
+     *
+     * 调用链：
+     * [org.apache.rocketmq.broker.BrokerStartup#main(java.lang.String[]) main方法] -->
+     * [org.apache.rocketmq.broker.BrokerStartup#start(org.apache.rocketmq.broker.BrokerController)] -->
+     * [org.apache.rocketmq.broker.BrokerStartup#createBrokerController(java.lang.String[])] -->
+     * [org.apache.rocketmq.broker.BrokerController#initialize()] -->
+     * [org.apache.rocketmq.store.DefaultMessageStore#load() 本方法]
+     *
      */
     public boolean load() {
         boolean result = true;
 
         try {
+            /**
+             * 根据abort文件是否存在来判断，broker是否正常退出
+             */
             boolean lastExitOK = !this.isTempFileExist();
             log.info("last shutdown {}", lastExitOK ? "normally" : "abnormally");
 
             // load Commit Log
+            /**
+             *
+             * 1. 先加载CommitLog
+             *
+             */
             result = result && this.commitLog.load();
 
             // load Consume Queue
+            /**
+             *
+             * 2. 上面加载完commitLog（加载成功）
+             * 然后下面加载consume queue
+             *
+             */
             result = result && this.loadConsumeQueue();
 
             if (result) {
+                /**
+                 * 3. checkpoint
+                 */
                 this.storeCheckpoint =
                     new StoreCheckpoint(StorePathConfigHelper.getStoreCheckpoint(this.messageStoreConfig.getStorePathRootDir()));
-
+                /**
+                 * 4. index
+                 */
                 this.indexService.load(lastExitOK);
 
+                /**
+                 * 开始恢复
+                 */
                 this.recover(lastExitOK);
 
                 log.info("load over, and the max phy offset = {}", this.getMaxPhyOffset());
@@ -224,6 +275,13 @@ public class DefaultMessageStore implements MessageStore {
 
     /**
      * @throws Exception
+     */
+    /**
+     * [org.apache.rocketmq.broker.BrokerStartup#main() main方法] -->
+     * [org.apache.rocketmq.broker.BrokerStartup#start(org.apache.rocketmq.broker.BrokerController) 静态方法] -->
+     * [org.apache.rocketmq.broker.BrokerController#start())] -->
+     * [org.apache.rocketmq.store.DefaultMessageStore#start()]
+     *
      */
     public void start() throws Exception {
 
