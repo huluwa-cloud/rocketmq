@@ -67,6 +67,9 @@ public class BrokerStartup {
         start(createBrokerController(args));
     }
 
+    /**
+     * Step 3: 启动BrokerController服务，开始接受请求
+     */
     public static BrokerController start(BrokerController controller) {
         try {
 
@@ -90,12 +93,18 @@ public class BrokerStartup {
         return null;
     }
 
+    /**
+     * Step 4 :
+     */
     public static void shutdown(final BrokerController controller) {
         if (null != controller) {
             controller.shutdown();
         }
     }
 
+    /**
+     * Step 1: 创建和初始化BrokerController
+     */
     public static BrokerController createBrokerController(String[] args) {
         System.setProperty(RemotingCommand.REMOTING_VERSION_KEY, Integer.toString(MQVersion.CURRENT_VERSION));
 
@@ -134,6 +143,9 @@ public class BrokerStartup {
                 String file = commandLine.getOptionValue('c');
                 if (file != null) {
                     configFile = file;
+                    /**
+                     * Broker配置文件读取
+                     */
                     InputStream in = new BufferedInputStream(new FileInputStream(file));
                     properties = new Properties();
                     properties.load(in);
@@ -170,13 +182,15 @@ public class BrokerStartup {
                     System.exit(-3);
                 }
             }
-
+            // Broker的三种角色
             switch (messageStoreConfig.getBrokerRole()) {
                 case ASYNC_MASTER:
                 case SYNC_MASTER:
+                    // 如果是MASTER，brokerID一定是为0
                     brokerConfig.setBrokerId(MixAll.MASTER_ID);
                     break;
                 case SLAVE:
+                    // 如果是SLAVE，brokerID一定要大于0
                     if (brokerConfig.getBrokerId() <= 0) {
                         System.out.printf("Slave's brokerId must be > 0");
                         System.exit(-3);
@@ -266,6 +280,9 @@ public class BrokerStartup {
         return null;
     }
 
+    /**
+     * 有点鸡肋的一个方法
+     */
     private static void properties2SystemEnv(Properties properties) {
         if (properties == null) {
             return;
@@ -276,6 +293,9 @@ public class BrokerStartup {
         System.setProperty("rocketmq.namesrv.domain.subgroup", rmqAddressServerSubGroup);
     }
 
+    /**
+     * Step 2
+     */
     private static Options buildCommandlineOptions(final Options options) {
         Option opt = new Option("c", "configFile", true, "Broker config properties file");
         opt.setRequired(false);
@@ -291,4 +311,5 @@ public class BrokerStartup {
 
         return options;
     }
+
 }
