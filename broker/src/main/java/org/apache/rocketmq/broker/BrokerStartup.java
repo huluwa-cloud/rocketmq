@@ -252,6 +252,10 @@ public class BrokerStartup {
                 System.exit(-3);
             }
 
+            /**
+             * 注入钩子线程
+             * 在JVM退出的时候，关闭和释放资源。
+             */
             Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
                 private volatile boolean hasShutdown = false;
                 private AtomicInteger shutdownTimes = new AtomicInteger(0);
@@ -263,6 +267,9 @@ public class BrokerStartup {
                         if (!this.hasShutdown) {
                             this.hasShutdown = true;
                             long beginTime = System.currentTimeMillis();
+                            /**
+                             * 钩子线程调用了BrokerController的shutdown方法
+                             */
                             controller.shutdown();
                             long consumingTimeTotal = System.currentTimeMillis() - beginTime;
                             log.info("Shutdown hook over, consuming total time(ms): {}", consumingTimeTotal);
