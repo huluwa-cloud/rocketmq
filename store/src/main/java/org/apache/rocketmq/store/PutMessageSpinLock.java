@@ -23,6 +23,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *
  * 果然，自旋锁的实现方式，和我设想的一样。
  * 核心就是：用一个原子变量作为锁标识。
+ *
+ * PutMessage的自旋锁，官方是建议在【低锁竞争】的情况下才用。
  */
 public class PutMessageSpinLock implements PutMessageLock {
     //true: Can lock, false : in lock.
