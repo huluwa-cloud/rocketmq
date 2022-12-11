@@ -26,8 +26,22 @@ import org.apache.rocketmq.remoting.protocol.RemotingCommand;
  *
  */
 public interface NettyRequestProcessor {
-    RemotingCommand processRequest(ChannelHandlerContext ctx, RemotingCommand request)
-        throws Exception;
+
+    /**
+     * 在这里就可以看到，同步和异步接口的设计不同。
+     *
+     * 这里是同步处理请求，所以，会有返回值。因为要求同步返回嘛。
+     * 但是看实现了这个接口的异步抽象类，扩展的异步方法。就不需要返回值了，直接是void。
+     *
+     * 但是异步任务的处理结果，需要做处理。所以，需要设计一个策略回调接口，作为方法参数。
+     * 允许自定义异步结果处理逻辑。（这就是扩展性）
+     *
+     * 这种，同步、异步的设计方式，我觉得也是挺通用的。
+     *
+     * @see AsyncNettyRequestProcessor#asyncProcessRequest(ChannelHandlerContext, RemotingCommand, RemotingResponseCallback)
+     *
+     */
+    RemotingCommand processRequest(ChannelHandlerContext ctx, RemotingCommand request) throws Exception;
 
     boolean rejectRequest();
 
