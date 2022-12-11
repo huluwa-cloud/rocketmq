@@ -18,6 +18,14 @@ package org.apache.rocketmq.store;
 
 /**
  * Used when trying to put message
+ *
+ * 多线程都要做消息存储的时候，是需要加锁，保证线程安全的。
+ * PutMessageLock就是这把锁。
+ *
+ * Rocketmq提供了两种实现：PutMessageSpinLock（自旋锁）和 PutMessageReentrantLock（可重入锁）
+ *
+ *
+ *
  */
 public interface PutMessageLock {
     void lock();
