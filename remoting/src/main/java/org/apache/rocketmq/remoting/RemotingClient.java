@@ -25,6 +25,21 @@ import org.apache.rocketmq.remoting.exception.RemotingTooMuchRequestException;
 import org.apache.rocketmq.remoting.netty.NettyRequestProcessor;
 import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 
+/**
+ *
+ * Client（Producer和Consumer）的网络层接口。
+ * 无论上层的Producer和Consumer玩得多花哨，它们一定是会持有一个RemotingClient实例。
+ * 最终都一定会调用这个RemotingClient实例。
+ *
+ * RemotingClient的实现类就只有一个：
+ * @see org.apache.rocketmq.remoting.netty.NettyRemotingClient
+ *
+ * 这里有一个设计思想值得体会一下：
+ * 那就是抽象出来的这个RemotingClient，确实是一个供上层调用的网络层。都知道RocketMQ底层用的Netty。
+ * 但是这个接口的设计，没有任何Netty的踪迹，到了实现类，才出现所谓的Netty。
+ * 这就是抽象的意义。
+ *
+ */
 public interface RemotingClient extends RemotingService {
 
     void updateNameServerAddressList(final List<String> addrs);
