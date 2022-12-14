@@ -27,6 +27,9 @@ import java.util.regex.Pattern;
 
 public class TopicValidator {
 
+    /**
+     * 当broker开启了自动创建topic，才会建TBW102
+     */
     public static final String AUTO_CREATE_TOPIC_KEY_TOPIC = "TBW102"; // Will be created at broker when isAutoCreateTopicEnable
     public static final String RMQ_SYS_SCHEDULE_TOPIC = "SCHEDULE_TOPIC_XXXX";
     public static final String RMQ_SYS_BENCHMARK_TOPIC = "BenchmarkTest";
@@ -43,6 +46,9 @@ public class TopicValidator {
     private static final Pattern PATTERN = Pattern.compile(VALID_PATTERN_STR);
     private static final int TOPIC_MAX_LENGTH = 127;
 
+    /**
+     * 因为不存在并发访问，所以使用普通的HashSet就可以了
+     */
     private static final Set<String> SYSTEM_TOPIC_SET = new HashSet<String>();
 
     /**
