@@ -26,6 +26,9 @@ import org.apache.rocketmq.common.message.Message;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.remoting.exception.RemotingException;
 
+/**
+ * MQProducer接口定义 Producer的职责
+ */
 public interface MQProducer extends MQAdmin {
     void start() throws MQClientException;
 
@@ -33,59 +36,45 @@ public interface MQProducer extends MQAdmin {
 
     List<MessageQueue> fetchPublishMessageQueues(final String topic) throws MQClientException;
 
-    SendResult send(final Message msg) throws MQClientException, RemotingException, MQBrokerException,
-        InterruptedException;
 
-    SendResult send(final Message msg, final long timeout) throws MQClientException,
-        RemotingException, MQBrokerException, InterruptedException;
+    // ============================================== 单条消息投递 ========================================== Begin
 
-    void send(final Message msg, final SendCallback sendCallback) throws MQClientException,
-        RemotingException, InterruptedException;
+    // 同步投递
+    SendResult send(final Message msg) throws MQClientException, RemotingException, MQBrokerException, InterruptedException;
+    SendResult send(final Message msg, final long timeout) throws MQClientException, RemotingException, MQBrokerException, InterruptedException;
 
-    void send(final Message msg, final SendCallback sendCallback, final long timeout)
-        throws MQClientException, RemotingException, InterruptedException;
+    // 异步投递 （投递结果处理逻辑在SendCallback中定义）
+    void send(final Message msg, final SendCallback sendCallback) throws MQClientException, RemotingException, InterruptedException;
+    void send(final Message msg, final SendCallback sendCallback, final long timeout) throws MQClientException, RemotingException, InterruptedException;
 
-    void sendOneway(final Message msg) throws MQClientException, RemotingException,
-        InterruptedException;
 
-    SendResult send(final Message msg, final MessageQueue mq) throws MQClientException,
-        RemotingException, MQBrokerException, InterruptedException;
+    void sendOneway(final Message msg) throws MQClientException, RemotingException, InterruptedException;
 
-    SendResult send(final Message msg, final MessageQueue mq, final long timeout)
-        throws MQClientException, RemotingException, MQBrokerException, InterruptedException;
+    // 同步投递 + 指定读写队列投递
+    SendResult send(final Message msg, final MessageQueue mq) throws MQClientException, RemotingException, MQBrokerException, InterruptedException;
+    SendResult send(final Message msg, final MessageQueue mq, final long timeout) throws MQClientException, RemotingException, MQBrokerException, InterruptedException;
 
-    void send(final Message msg, final MessageQueue mq, final SendCallback sendCallback)
-        throws MQClientException, RemotingException, InterruptedException;
+    // 异步投递 + 指定读写队列投递
+    void send(final Message msg, final MessageQueue mq, final SendCallback sendCallback) throws MQClientException, RemotingException, InterruptedException;
+    void send(final Message msg, final MessageQueue mq, final SendCallback sendCallback, long timeout) throws MQClientException, RemotingException, InterruptedException;
 
-    void send(final Message msg, final MessageQueue mq, final SendCallback sendCallback, long timeout)
-        throws MQClientException, RemotingException, InterruptedException;
+    void sendOneway(final Message msg, final MessageQueue mq) throws MQClientException, RemotingException, InterruptedException;
 
-    void sendOneway(final Message msg, final MessageQueue mq) throws MQClientException,
-        RemotingException, InterruptedException;
+    SendResult send(final Message msg, final MessageQueueSelector selector, final Object arg) throws MQClientException, RemotingException, MQBrokerException, InterruptedException;
+    SendResult send(final Message msg, final MessageQueueSelector selector, final Object arg, final long timeout) throws MQClientException, RemotingException, MQBrokerException, InterruptedException;
 
-    SendResult send(final Message msg, final MessageQueueSelector selector, final Object arg)
-        throws MQClientException, RemotingException, MQBrokerException, InterruptedException;
-
-    SendResult send(final Message msg, final MessageQueueSelector selector, final Object arg,
-        final long timeout) throws MQClientException, RemotingException, MQBrokerException,
-        InterruptedException;
-
-    void send(final Message msg, final MessageQueueSelector selector, final Object arg,
-        final SendCallback sendCallback) throws MQClientException, RemotingException,
-        InterruptedException;
-
-    void send(final Message msg, final MessageQueueSelector selector, final Object arg,
-        final SendCallback sendCallback, final long timeout) throws MQClientException, RemotingException,
-        InterruptedException;
+    void send(final Message msg, final MessageQueueSelector selector, final Object arg, final SendCallback sendCallback) throws MQClientException, RemotingException, InterruptedException;
+    void send(final Message msg, final MessageQueueSelector selector, final Object arg, final SendCallback sendCallback, final long timeout) throws MQClientException, RemotingException, InterruptedException;
 
     void sendOneway(final Message msg, final MessageQueueSelector selector, final Object arg)
         throws MQClientException, RemotingException, InterruptedException;
 
-    TransactionSendResult sendMessageInTransaction(final Message msg,
-        final LocalTransactionExecuter tranExecuter, final Object arg) throws MQClientException;
+    TransactionSendResult sendMessageInTransaction(final Message msg, final LocalTransactionExecuter tranExecuter, final Object arg) throws MQClientException;
 
-    TransactionSendResult sendMessageInTransaction(final Message msg,
-        final Object arg) throws MQClientException;
+    TransactionSendResult sendMessageInTransaction(final Message msg, final Object arg) throws MQClientException;
+    // ============================================== 单条消息投递 ========================================== End
+
+
 
     //for batch
     SendResult send(final Collection<Message> msgs) throws MQClientException, RemotingException, MQBrokerException,

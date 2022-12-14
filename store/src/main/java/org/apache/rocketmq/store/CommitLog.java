@@ -66,6 +66,9 @@ public class CommitLog {
     private final FlushCommitLogService commitLogService;
 
     private final AppendMessageCallback appendMessageCallback;
+    /**
+     * 声明了一个线程本地变量
+     */
     private final ThreadLocal<PutMessageThreadLocal> putMessageThreadLocal;
     protected HashMap<String/* topic-queueid */, Long/* offset */> topicQueueTable = new HashMap<String, Long>(1024);
     protected volatile long confirmOffset = -1L;
@@ -78,14 +81,18 @@ public class CommitLog {
 
     public CommitLog(final DefaultMessageStore defaultMessageStore) {
         String storePath = defaultMessageStore.getMessageStoreConfig().getStorePathCommitLog();
+
         if (storePath.contains(MessageStoreConfig.MULTI_PATH_SPLITTER)) {
+            // 如果CommitLog配置的存储路径，包含有逗号
             this.mappedFileQueue = new MultiPathMappedFileQueue(defaultMessageStore.getMessageStoreConfig(),
                     defaultMessageStore.getMessageStoreConfig().getMappedFileSizeCommitLog(),
                     defaultMessageStore.getAllocateMappedFileService(), this::getFullStorePaths);
         } else {
-            this.mappedFileQueue = new MappedFileQueue(storePath,
+            this.mappedFileQueue = new MappedFileQueue(
+                    storePath,
                     defaultMessageStore.getMessageStoreConfig().getMappedFileSizeCommitLog(),
-                    defaultMessageStore.getAllocateMappedFileService());
+                    defaultMessageStore.getAllocateMappedFileService()
+            );
         }
 
         this.defaultMessageStore = defaultMessageStore;
@@ -97,14 +104,20 @@ public class CommitLog {
         }
 
         this.commitLogService = new CommitRealTimeService();
-
         this.appendMessageCallback = new DefaultAppendMessageCallback(defaultMessageStore.getMessageStoreConfig().getMaxMessageSize());
+
+        /**
+         * 创建线程本地变量 putMessageThreadLocal
+         */
         putMessageThreadLocal = new ThreadLocal<PutMessageThreadLocal>() {
             @Override
             protected PutMessageThreadLocal initialValue() {
                 return new PutMessageThreadLocal(defaultMessageStore.getMessageStoreConfig().getMaxMessageSize());
             }
         };
+        /**
+         * 根据配置选用不同的锁
+         */
         this.putMessageLock = defaultMessageStore.getMessageStoreConfig().isUseReentrantLockWhenPutMessage() ? new PutMessageReentrantLock() : new PutMessageSpinLock();
 
     }
@@ -117,12 +130,33 @@ public class CommitLog {
         return fullStorePaths;
     }
 
+    /**
+     *
+     * 调用链：
+     * [org.apache.rocketmq.broker.BrokerStartup#main(java.lang.String[]) main方法] -->
+     * [org.apache.rocketmq.broker.BrokerStartup#start(org.apache.rocketmq.broker.BrokerController)] -->
+     * [org.apache.rocketmq.broker.BrokerStartup#createBrokerController(java.lang.String[])] -->
+     * [org.apache.rocketmq.broker.BrokerController#initialize()] -->
+     * [org.apache.rocketmq.store.DefaultMessageStore#load()] -->
+     * [org.apache.rocketmq.store.CommitLog#load() 本方法]
+     *
+     */
     public boolean load() {
         boolean result = this.mappedFileQueue.load();
         log.info("load commit log " + (result ? "OK" : "Failed"));
         return result;
     }
 
+    /**
+     *
+     * 调用链：
+     * [org.apache.rocketmq.broker.BrokerStartup#main() main方法] 入口 -->
+     * [org.apache.rocketmq.broker.BrokerStartup#start(org.apache.rocketmq.broker.BrokerController) 静态方法] -->
+     * [org.apache.rocketmq.broker.BrokerController#start())] -->
+     * [org.apache.rocketmq.store.DefaultMessageStore#start()] -->
+     * [org.apache.rocketmq.store.CommitLog#start()]
+     *
+     */
     public void start() {
         this.flushCommitLogService.start();
 
@@ -301,9 +335,12 @@ public class CommitLog {
             long bornTimeStamp = byteBuffer.getLong();
 
             ByteBuffer byteBuffer1;
+            // 其实就是判断，是否为IPV6
             if ((sysFlag & MessageSysFlag.BORNHOST_V6_FLAG) == 0) {
+                // 不是IPV6，读8个字节
                 byteBuffer1 = byteBuffer.get(bytesContent, 0, 4 + 4);
             } else {
+                // 是IPV6，读20个字节
                 byteBuffer1 = byteBuffer.get(bytesContent, 0, 16 + 4);
             }
 
@@ -661,7 +698,12 @@ public class CommitLog {
                 beginTimeInLock = 0;
                 return CompletableFuture.completedFuture(new PutMessageResult(PutMessageStatus.CREATE_MAPEDFILE_FAILED, null));
             }
-
+            /**
+             * !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+             * append的方式，就是顺序写！！！顺序写磁盘。
+             *
+             *
+             */
             result = mappedFile.appendMessage(msg, this.appendMessageCallback, putMessageContext);
             switch (result.getStatus()) {
                 case PUT_OK:
@@ -1282,13 +1324,35 @@ public class CommitLog {
             this.maxMessageSize = size;
         }
 
+        /**
+         * 其中一条调用链：
+         * [org.apache.rocketmq.store.MappedFile#appendMessage()]
+         * [org.apache.rocketmq.store.MappedFile#appendMessagesInner()] -->
+         * [本方法]
+         *
+         * 消息在CommitLog中的存储格式
+         *
+         * @param fileFromOffset
+         * @param byteBuffer
+         * @param maxBlank
+         * @param msgInner
+         * @param putMessageContext
+         * @return
+         */
         public AppendMessageResult doAppend(final long fileFromOffset, final ByteBuffer byteBuffer, final int maxBlank,
             final MessageExtBrokerInner msgInner, PutMessageContext putMessageContext) {
             // STORETIMESTAMP + STOREHOSTADDRESS + OFFSET <br>
 
             // PHY OFFSET
+            /**
+             * commitLog的文件的文件名，就是本commitLog文件所存储的第一条消息的位移下标。
+             *
+             */
             long wroteOffset = fileFromOffset + byteBuffer.position();
 
+            /**
+             * MsgId的生成策略
+             */
             Supplier<String> msgIdSupplier = () -> {
                 int sysflag = msgInner.getSysFlag();
                 int msgIdLen = (sysflag & MessageSysFlag.STOREHOSTADDRESS_V6_FLAG) == 0 ? 4 + 4 + 8 : 16 + 4 + 8;
@@ -1300,6 +1364,11 @@ public class CommitLog {
             };
 
             // Record ConsumeQueue information
+            /**
+             * 记录consumerQueue的信息。
+             *
+             *
+             */
             String key = putMessageContext.getTopicQueueTableKey();
             Long queueOffset = CommitLog.this.topicQueueTable.get(key);
             if (null == queueOffset) {
@@ -1358,6 +1427,7 @@ public class CommitLog {
             final long beginTimeMills = CommitLog.this.defaultMessageStore.now();
             // Write messages to the queue buffer
             byteBuffer.put(preEncodeBuffer);
+            // 为了让Buffer的内存被GC回收
             msgInner.setEncodedBuff(null);
             AppendMessageResult result = new AppendMessageResult(AppendMessageStatus.PUT_OK, wroteOffset, msgLen, msgIdSupplier,
                 msgInner.getStoreTimestamp(), queueOffset, CommitLog.this.defaultMessageStore.now() - beginTimeMills);
@@ -1445,6 +1515,7 @@ public class CommitLog {
                     messagesByteBuff.reset();
                     // Here the length of the specially set maxBlank
                     byteBuffer.reset(); //ignore the previous appended messages
+                    // !!!!!!!!!!!!!!!!!!!!
                     byteBuffer.put(this.msgStoreItemMemory.array(), 0, 8);
                     return new AppendMessageResult(AppendMessageStatus.END_OF_FILE, wroteOffset, maxBlank, msgIdSupplier, messageExtBatch.getStoreTimestamp(),
                         beginQueueOffset, CommitLog.this.defaultMessageStore.now() - beginTimeMills);
@@ -1467,6 +1538,7 @@ public class CommitLog {
 
             messagesByteBuff.position(0);
             messagesByteBuff.limit(totalMsgLen);
+                    // !!!!!!!!!!!!!!!!!!!!
             byteBuffer.put(messagesByteBuff);
             messageExtBatch.setEncodedBuff(null);
             AppendMessageResult result = new AppendMessageResult(AppendMessageStatus.PUT_OK, wroteOffset, totalMsgLen, msgIdSupplier,
@@ -1491,6 +1563,9 @@ public class CommitLog {
         private final int maxMessageSize;
 
         MessageExtEncoder(final int size) {
+            /**
+             * 用的直接内存
+             */
             this.encoderBuffer = ByteBuffer.allocateDirect(size);
             this.maxMessageSize = size;
         }
