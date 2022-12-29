@@ -48,6 +48,11 @@ public class TransientStorePool {
      */
     public void init() {
         for (int i = 0; i < poolSize; i++) {
+            /**
+             *
+             * 这里用的JDK的API，分配直接内存。
+             *
+             */
             ByteBuffer byteBuffer = ByteBuffer.allocateDirect(fileSize);
 
             final long address = ((DirectBuffer) byteBuffer).address();
