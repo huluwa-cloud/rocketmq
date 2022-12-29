@@ -16,6 +16,11 @@
  */
 package org.apache.rocketmq.remoting.netty;
 
+/**
+ * 这个类是RocketMQ 通用的Netty配置类
+ *
+ * NameServer、 Broker都用的它
+ */
 public class NettyServerConfig implements Cloneable {
     private int listenPort = 8888;
     private int serverWorkerThreads = 8;
