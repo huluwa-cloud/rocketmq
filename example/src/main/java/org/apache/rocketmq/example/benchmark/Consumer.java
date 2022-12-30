@@ -55,7 +55,12 @@ public class Consumer {
             System.exit(-1);
         }
 
+        /*
+         *  提取测试的配置
+         */
+        // 消费的Topic （默认是BenchmarkTest）
         final String topic = commandLine.hasOption('t') ? commandLine.getOptionValue('t').trim() : "BenchmarkTest";
+        // 消费的线程数
         final int threadCount = commandLine.hasOption('w') ? Integer.parseInt(commandLine.getOptionValue('w')) : 20;
         final String groupPrefix = commandLine.hasOption('g') ? commandLine.getOptionValue('g').trim() : "benchmark_consumer";
         final String isSuffixEnable = commandLine.hasOption('p') ? commandLine.getOptionValue('p').trim() : "false";
@@ -149,13 +154,16 @@ public class Consumer {
             }
         }
 
+        /*
+         * 这里写，消费和处理消息的逻辑
+         */
         consumer.registerMessageListener(new MessageListenerConcurrently() {
             @Override
             public ConsumeConcurrentlyStatus consumeMessage(List<MessageExt> msgs,
                 ConsumeConcurrentlyContext context) {
                 MessageExt msg = msgs.get(0);
                 long now = System.currentTimeMillis();
-
+                // 接收到的消息数加1
                 statsBenchmarkConsumer.getReceiveMessageTotalCount().increment();
 
                 long born2ConsumerRT = now - msg.getBornTimestamp();
@@ -248,11 +256,11 @@ class StatsBenchmarkConsumer {
 
     public Long[] createSnapshot() {
         Long[] snap = new Long[] {
-            System.currentTimeMillis(),
-            this.receiveMessageTotalCount.longValue(),
-            this.born2ConsumerTotalRT.longValue(),
-            this.store2ConsumerTotalRT.longValue(),
-            this.failCount.longValue()
+            System.currentTimeMillis(),                 // [0]
+            this.receiveMessageTotalCount.longValue(),  // [1] 接收的消息总数
+            this.born2ConsumerTotalRT.longValue(),      // [2]
+            this.store2ConsumerTotalRT.longValue(),     // [3]
+            this.failCount.longValue()                  // [4] 失败的消息数
         };
 
         return snap;
