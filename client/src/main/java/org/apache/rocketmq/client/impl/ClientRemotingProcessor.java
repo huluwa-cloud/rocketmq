@@ -65,8 +65,7 @@ public class ClientRemotingProcessor extends AsyncNettyRequestProcessor implemen
     }
 
     @Override
-    public RemotingCommand processRequest(ChannelHandlerContext ctx,
-        RemotingCommand request) throws RemotingCommandException {
+    public RemotingCommand processRequest(ChannelHandlerContext ctx, RemotingCommand request) throws RemotingCommandException {
         switch (request.getCode()) {
             case RequestCode.CHECK_TRANSACTION_STATE:
                 return this.checkTransactionState(ctx, request);
@@ -81,6 +80,11 @@ public class ClientRemotingProcessor extends AsyncNettyRequestProcessor implemen
                 return this.getConsumerRunningInfo(ctx, request);
 
             case RequestCode.CONSUME_MESSAGE_DIRECTLY:
+                /**
+                 * !!!!!!!!!!!!!!!!!!!!!!!!!!
+                 * Client消费消息入口
+                 * !!!!!!!!!!!!!!!!!!!!!!!!!!
+                 */
                 return this.consumeMessageDirectly(ctx, request);
 
             case RequestCode.PUSH_REPLY_MESSAGE_TO_CLIENT:
@@ -200,8 +204,12 @@ public class ClientRemotingProcessor extends AsyncNettyRequestProcessor implemen
         return response;
     }
 
-    private RemotingCommand consumeMessageDirectly(ChannelHandlerContext ctx,
-        RemotingCommand request) throws RemotingCommandException {
+    /**
+     *
+     * RemotingCommand是RocketMQ的通讯协议，一眼看过去，就记起来了。
+     *
+     */
+    private RemotingCommand consumeMessageDirectly(ChannelHandlerContext ctx, RemotingCommand request) throws RemotingCommandException {
         final RemotingCommand response = RemotingCommand.createResponseCommand(null);
         final ConsumeMessageDirectlyResultRequestHeader requestHeader =
             (ConsumeMessageDirectlyResultRequestHeader) request
@@ -209,6 +217,9 @@ public class ClientRemotingProcessor extends AsyncNettyRequestProcessor implemen
 
         final MessageExt msg = MessageDecoder.decode(ByteBuffer.wrap(request.getBody()));
 
+        /**
+         * consumer group可以从请求头中获取
+         */
         ConsumeMessageDirectlyResult result =
             this.mqClientFactory.consumeMessageDirectly(msg, requestHeader.getConsumerGroup(), requestHeader.getBrokerName());
 

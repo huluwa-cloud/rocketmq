@@ -149,6 +149,15 @@ public abstract class NettyRemotingAbstract {
      * @param ctx Channel handler context.
      * @param msg incoming remoting command.
      * @throws Exception if there were any error while processing the incoming command.
+     *
+     * 调用链1：
+     * [org.apache.rocketmq.remoting.netty.【NettyRemotingClient】.NettyClientHandler（Client的一个Netty Handler）] -->
+     * [NettyRemotingAbstract#processMessageReceived(ChannelHandlerContext, RemotingCommand) 本方法]
+     *
+     * 调用链2：
+     * [org.apache.rocketmq.remoting.netty.【NettyRemotingServer】.NettyServerHandler （Server的一个Netty Handler）] -->
+     * [NettyRemotingAbstract#processMessageReceived(ChannelHandlerContext, RemotingCommand) 本方法]
+     *
      */
     public void processMessageReceived(ChannelHandlerContext ctx, RemotingCommand msg) throws Exception {
         final RemotingCommand cmd = msg;
@@ -188,6 +197,16 @@ public abstract class NettyRemotingAbstract {
      *
      * @param ctx channel handler context.
      * @param cmd request command.
+     *
+     *  调用链1：
+     *  [org.apache.rocketmq.remoting.netty.【NettyRemotingServer】.NettyServerHandler （Server的一个Netty Handler）这是RocketMQ定义的Handler了] -->
+     *
+     * 调用链2：
+     * [org.apache.rocketmq.remoting.netty.【NettyRemotingClient】.NettyClientHandler（Client的一个Netty Handler）这是RocketMQ定义的Handler了] -->
+     *
+     * [NettyRemotingAbstract#processMessageReceived(ChannelHandlerContext, RemotingCommand) 同一个类] -->
+     * [org.apache.rocketmq.remoting.netty.NettyRemotingAbstract#processRequestCommand(ChannelHandlerContext, RemotingCommand) 本方法]
+     *
      */
     public void processRequestCommand(final ChannelHandlerContext ctx, final RemotingCommand cmd) {
         final Pair<NettyRequestProcessor, ExecutorService> matched = this.processorTable.get(cmd.getCode());
@@ -202,6 +221,7 @@ public abstract class NettyRemotingAbstract {
                     try {
                         String remoteAddr = RemotingHelper.parseChannelRemoteAddr(ctx.channel());
                         doBeforeRpcHooks(remoteAddr, cmd);
+                        // org.apache.rocketmq.remoting.netty.AsyncNettyRequestProcessor.asyncProcessRequest异步处理，回调策略接口的处理逻辑定义在这里。
                         final RemotingResponseCallback callback = new RemotingResponseCallback() {
                             @Override
                             public void callback(RemotingCommand response) {
@@ -218,6 +238,7 @@ public abstract class NettyRemotingAbstract {
                                             log.error(response.toString());
                                         }
                                     } else {
+                                        // 如果是oneway，就什么都不用做
                                     }
                                 }
                             }
