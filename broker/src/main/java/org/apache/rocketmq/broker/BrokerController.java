@@ -111,10 +111,12 @@ public class BrokerController {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.BROKER_LOGGER_NAME);
     private static final InternalLogger LOG_PROTECTION = InternalLoggerFactory.getLogger(LoggerName.PROTECTION_LOGGER_NAME);
     private static final InternalLogger LOG_WATER_MARK = InternalLoggerFactory.getLogger(LoggerName.WATER_MARK_LOGGER_NAME);
+    // ======================================== config =====================================
     private final BrokerConfig brokerConfig;
     private final NettyServerConfig nettyServerConfig;
     private final NettyClientConfig nettyClientConfig;
     private final MessageStoreConfig messageStoreConfig;
+    // ========================================  =====================================
     private final ConsumerOffsetManager consumerOffsetManager;
     private final ConsumerManager consumerManager;
     private final ConsumerFilterManager consumerFilterManager;
@@ -131,6 +133,7 @@ public class BrokerController {
     private final ScheduledExecutorService scheduledExecutorService = Executors.newSingleThreadScheduledExecutor(new ThreadFactoryImpl(
         "BrokerControllerScheduledThread"));
     private final SlaveSynchronize slaveSynchronize;
+    // ==================================== 各种线程池的任务队列 ====================================
     private final BlockingQueue<Runnable> sendThreadPoolQueue;
     private final BlockingQueue<Runnable> pullThreadPoolQueue;
     private final BlockingQueue<Runnable> replyThreadPoolQueue;
@@ -139,6 +142,7 @@ public class BrokerController {
     private final BlockingQueue<Runnable> heartbeatThreadPoolQueue;
     private final BlockingQueue<Runnable> consumerManagerThreadPoolQueue;
     private final BlockingQueue<Runnable> endTransactionThreadPoolQueue;
+    // ==================================== ======================================================
     private final FilterServerManager filterServerManager;
     private final BrokerStatsManager brokerStatsManager;
     private final List<SendMessageHook> sendMessageHookList = new ArrayList<SendMessageHook>();
@@ -147,6 +151,11 @@ public class BrokerController {
     private RemotingServer remotingServer;
     private RemotingServer fastRemotingServer;
     private TopicConfigManager topicConfigManager;
+    //  ======================================== 各种线程池 =========================================
+    /**
+     * 用来处理Client端发送过来的MQ消息的线程池。
+     * 默认线程数是4
+     */
     private ExecutorService sendMessageExecutor;
     private ExecutorService pullMessageExecutor;
     private ExecutorService replyMessageExecutor;
@@ -156,6 +165,7 @@ public class BrokerController {
     private ExecutorService heartbeatExecutor;
     private ExecutorService consumerManageExecutor;
     private ExecutorService endTransactionExecutor;
+    //  ========================================  =========================================
     private boolean updateMasterHAServerAddrPeriodically = false;
     private BrokerStats brokerStats;
     private InetSocketAddress storeHost;
@@ -168,6 +178,15 @@ public class BrokerController {
     private Future<?> slaveSyncFuture;
     private Map<Class,AccessValidator> accessValidatorMap = new HashMap<Class, AccessValidator>();
 
+    /**
+     *
+     * BrokerController就只有一个构造方法，传入的参数是4种类型的Config
+     *
+     * @param brokerConfig
+     * @param nettyServerConfig
+     * @param nettyClientConfig
+     * @param messageStoreConfig
+     */
     public BrokerController(
         final BrokerConfig brokerConfig,
         final NettyServerConfig nettyServerConfig,
@@ -240,9 +259,7 @@ public class BrokerController {
 
         if (result) {
             try {
-                this.messageStore =
-                    new DefaultMessageStore(this.messageStoreConfig, this.brokerStatsManager, this.messageArrivingListener,
-                        this.brokerConfig);
+                this.messageStore = new DefaultMessageStore(this.messageStoreConfig, this.brokerStatsManager, this.messageArrivingListener, this.brokerConfig);
                 if (messageStoreConfig.isEnableDLegerCommitLog()) {
                     DLedgerRoleChangeHandler roleChangeHandler = new DLedgerRoleChangeHandler(this, (DefaultMessageStore) messageStore);
                     ((DLedgerCommitLog)((DefaultMessageStore) messageStore).getCommitLog()).getdLedgerServer().getdLedgerLeaderElector().addRoleChangeHandler(roleChangeHandler);
@@ -265,12 +282,15 @@ public class BrokerController {
             NettyServerConfig fastConfig = (NettyServerConfig) this.nettyServerConfig.clone();
             fastConfig.setListenPort(nettyServerConfig.getListenPort() - 2);
             this.fastRemotingServer = new NettyRemotingServer(fastConfig, this.clientHousekeepingService);
+            /**
+             * 创建用来处理Client端发送过来的MQ消息的线程池
+             */
             this.sendMessageExecutor = new BrokerFixedThreadPoolExecutor(
                 this.brokerConfig.getSendMessageThreadPoolNums(),
                 this.brokerConfig.getSendMessageThreadPoolNums(),
-                1000 * 60,
+                1000 * 60,  // 空闲线程的存活时间还是熟悉的1分钟
                 TimeUnit.MILLISECONDS,
-                this.sendThreadPoolQueue,
+                this.sendThreadPoolQueue,   // 还是熟悉的LinkedBlockingQueue，用的有界队列。队列大小可配置，默认是1w。
                 new ThreadFactoryImpl("SendMessageThread_"));
 
             this.pullMessageExecutor = new BrokerFixedThreadPoolExecutor(
@@ -309,8 +329,9 @@ public class BrokerController {
                 this.clientManagerThreadPoolQueue,
                 new ThreadFactoryImpl("ClientManageThread_"));
 
+            // 处理心跳的线程池
             this.heartbeatExecutor = new BrokerFixedThreadPoolExecutor(
-                this.brokerConfig.getHeartbeatThreadPoolNums(),
+                this.brokerConfig.getHeartbeatThreadPoolNums(), // 线程数为[核数]
                 this.brokerConfig.getHeartbeatThreadPoolNums(),
                 1000 * 60,
                 TimeUnit.MILLISECONDS,
@@ -331,6 +352,9 @@ public class BrokerController {
 
             this.registerProcessor();
 
+            /**
+             * 每天打印一次日志：这个Broker昨天存了多少消息
+             */
             final long initialDelay = UtilAll.computeNextMorningTimeMillis() - System.currentTimeMillis();
             final long period = 1000 * 60 * 60 * 24;
             this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
@@ -377,6 +401,9 @@ public class BrokerController {
                 }
             }, 3, 3, TimeUnit.MINUTES);
 
+            /**
+             * 每秒在broker日志，打印一次水位线
+             */
             this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
                 @Override
                 public void run() {
@@ -426,6 +453,7 @@ public class BrokerController {
                         this.updateMasterHAServerAddrPeriodically = true;
                     }
                 } else {
+                    // 如果是broker主节点，那么每分钟打印一次日志：从节点落后了主节点多少offset
                     this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
                         @Override
                         public void run() {
@@ -533,7 +561,9 @@ public class BrokerController {
 
 
     private void initialRpcHooks() {
-
+        /**
+         * 这里用到了Java的 SPI机制
+         */
         List<RPCHook> rpcHooks = ServiceProvider.load(ServiceProvider.RPC_HOOK_ID, RPCHook.class);
         if (rpcHooks == null || rpcHooks.isEmpty()) {
             return;
@@ -543,6 +573,14 @@ public class BrokerController {
         }
     }
 
+    /**
+     * 注册Client过来的什么请求，该用什么NettyRequestProcessor来处理，以及该用哪个线程池。
+     *
+     * 调用链：
+     * org.apache.rocketmq.broker.BrokerController#initialize() -->
+     * org.apache.rocketmq.broker.BrokerController#registerProcessor()本方法
+     *
+     */
     public void registerProcessor() {
         /**
          * SendMessageProcessor
@@ -741,6 +779,16 @@ public class BrokerController {
         return subscriptionGroupManager;
     }
 
+    /**
+     * shutdown关闭Broker
+     *
+     * 其实就是关闭了一堆的线程池
+     * 我不用看，我都知道，这个方法，一定是会注册了的线程钩子调用了。也确实如此。因为起一个broker，涉及到一堆的服务和线程池等等的资源，是需要优雅释放和关闭的。
+     *
+     * org.apache.rocketmq.broker.BrokerStartup#createBrokerController(java.lang.String[])这个方法中，就注册了钩子线程（shutdownHook）
+     * 钩子线程里面就调用这个BrokerController的shutdown方法。
+     *
+     */
     public void shutdown() {
         if (this.brokerStatsManager != null) {
             this.brokerStatsManager.shutdown();
