@@ -250,6 +250,9 @@ public class BrokerController {
         return queryThreadPoolQueue;
     }
 
+    /**
+     * 初始化 BrokerController
+     */
     public boolean initialize() throws CloneNotSupportedException {
         boolean result = this.topicConfigManager.load();
 
@@ -589,6 +592,11 @@ public class BrokerController {
         sendProcessor.registerSendMessageHook(sendMessageHookList);
         sendProcessor.registerConsumeMessageHook(consumeMessageHookList);
 
+        /**
+         * 这里的注册processor，其实就是，将三元组，变为二元组。
+         * 本来 < RequestCode, processor, 线程池 > ，变为  < RequestCode, Map< processor, 线程池> >
+         * < RequestCode, Map< processor, 线程池> >是NettyRemotingAbstract#processorTable这个Map的一个Entry
+         */
         this.remotingServer.registerProcessor(RequestCode.SEND_MESSAGE, sendProcessor, this.sendMessageExecutor);
         this.remotingServer.registerProcessor(RequestCode.SEND_MESSAGE_V2, sendProcessor, this.sendMessageExecutor);
         this.remotingServer.registerProcessor(RequestCode.SEND_BATCH_MESSAGE, sendProcessor, this.sendMessageExecutor);
