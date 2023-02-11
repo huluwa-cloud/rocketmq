@@ -214,7 +214,8 @@ public abstract class NettyRemotingAbstract {
         final int opaque = cmd.getOpaque();
 
         if (pair != null) {
-            // 这里的run就是交给线程池跑的任务
+            // 这里的run就是交给线程池跑的任务. 注意，这里只是写处理逻辑而已。任务的投递，投递到线程池，还在下面
+            // ============================================================= begin
             Runnable run = new Runnable() {
                 @Override
                 public void run() {
@@ -258,7 +259,7 @@ public abstract class NettyRemotingAbstract {
                     } catch (Throwable e) {
                         log.error("process request exception", e);
                         log.error(cmd.toString());
-
+                        // 如果是oneway的投递，连处理请求错误了，啥都不给client端返回
                         if (!cmd.isOnewayRPC()) {
                             final RemotingCommand response = RemotingCommand.createResponseCommand(RemotingSysResponseCode.SYSTEM_ERROR,
                                 RemotingHelper.exceptionSimpleDesc(e));
@@ -268,7 +269,9 @@ public abstract class NettyRemotingAbstract {
                     }
                 }
             };
+            // ============================================================ end
 
+            // pair.getObject1()是processor
             if (pair.getObject1().rejectRequest()) {
                 final RemotingCommand response = RemotingCommand.createResponseCommand(RemotingSysResponseCode.SYSTEM_BUSY,
                     "[REJECTREQUEST]system busy, start flow control for a while");
@@ -282,10 +285,10 @@ public abstract class NettyRemotingAbstract {
                 /*
                  *
                  * pair的getObject2拿出来的就是线程池，这里把任务提交给线程池
-                 *
+                 * pair.getObject2()是线程池
                  */
                 pair.getObject2().submit(requestTask);
-            } catch (RejectedExecutionException e) {    // 线程池开始拒绝执行
+            } catch (RejectedExecutionException e) {    // 线程池已经开始拒绝执行
                 if ((System.currentTimeMillis() % 10000) == 0) {
                     log.warn(RemotingHelper.parseChannelRemoteAddr(ctx.channel())
                         + ", too many requests and system thread pool busy, RejectedExecutionException "

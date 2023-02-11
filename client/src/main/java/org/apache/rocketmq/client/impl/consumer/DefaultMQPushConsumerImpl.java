@@ -106,6 +106,9 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
     private PullAPIWrapper pullAPIWrapper;
     private volatile boolean pause = false;
     private boolean consumeOrderly = false;
+    /**
+     * 一个DefaultMQPushConsumerImpl实例，只有一个MessageListener
+     */
     private MessageListener messageListenerInner;
     private OffsetStore offsetStore;
     private ConsumeMessageService consumeMessageService;
@@ -210,6 +213,17 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
         this.offsetStore = offsetStore;
     }
 
+    /**
+     *
+     * 调用链：
+     * [] -->
+     * [] -->
+     * [] -->
+     * [] -->
+     * [] -->
+     *
+     * @param pullRequest
+     */
     public void pullMessage(final PullRequest pullRequest) {
         final ProcessQueue processQueue = pullRequest.getProcessQueue();
         if (processQueue.isDropped()) {
@@ -328,7 +342,9 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
 
                                 DefaultMQPushConsumerImpl.this.getConsumerStatsManager().incPullTPS(pullRequest.getConsumerGroup(),
                                     pullRequest.getMessageQueue().getTopic(), pullResult.getMsgFoundList().size());
-
+                                /**
+                                 *
+                                 */
                                 boolean dispatchToConsume = processQueue.putMessage(pullResult.getMsgFoundList());
                                 DefaultMQPushConsumerImpl.this.consumeMessageService.submitConsumeRequest(
                                     pullResult.getMsgFoundList(),
@@ -551,6 +567,16 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
         shutdown(0);
     }
 
+    /**
+     *
+     * 调用链：
+     * [] -->
+     * [] -->
+     * [] -->
+     * [] -->
+     *
+     * @param awaitTerminateMillis
+     */
     public synchronized void shutdown(long awaitTerminateMillis) {
         switch (this.serviceState) {
             case CREATE_JUST:
@@ -571,6 +597,14 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
         }
     }
 
+    /**
+     * 调用链：
+     *
+     * [用户代码] -->
+     * [org.apache.rocketmq.client.consumer.DefaultMQPushConsumer#start()] -->
+     * [org.apache.rocketmq.client.impl.consumer.DefaultMQPushConsumerImpl#start() 本方法] -->
+     *
+     */
     public synchronized void start() throws MQClientException {
         switch (this.serviceState) {
             case CREATE_JUST:

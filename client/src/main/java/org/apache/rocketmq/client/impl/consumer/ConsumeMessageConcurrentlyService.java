@@ -70,14 +70,22 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
         this.consumerGroup = this.defaultMQPushConsumer.getConsumerGroup();
         this.consumeRequestQueue = new LinkedBlockingQueue<Runnable>();
 
+        /**
+         *
+         * consumer的线程池，就是在这里创建的！！！
+         *
+         */
         this.consumeExecutor = new ThreadPoolExecutor(
-            this.defaultMQPushConsumer.getConsumeThreadMin(),
-            this.defaultMQPushConsumer.getConsumeThreadMax(),
-            1000 * 60,
-            TimeUnit.MILLISECONDS,
-            this.consumeRequestQueue,
+            this.defaultMQPushConsumer.getConsumeThreadMin(),               // 核心线程数，默认20
+            this.defaultMQPushConsumer.getConsumeThreadMax(),               // 最大线程数，默认20
+            1000 * 60,                                                      // 线程存活1分钟
+            TimeUnit.MILLISECONDS,                                          //
+            this.consumeRequestQueue,                                       // 这里使用了LinkedBlockQueue，而且没有指定大小。那么就是一个无界队列。
             new ThreadFactoryImpl("ConsumeMessageThread_"));
 
+        /**
+         * 这里又建立了两个
+         */
         this.scheduledExecutorService = Executors.newSingleThreadScheduledExecutor(new ThreadFactoryImpl("ConsumeMessageScheduledThread_"));
         this.cleanExpireMsgExecutors = Executors.newSingleThreadScheduledExecutor(new ThreadFactoryImpl("CleanExpireMsgScheduledThread_"));
     }

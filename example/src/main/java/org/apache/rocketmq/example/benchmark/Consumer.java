@@ -85,6 +85,7 @@ public class Consumer {
 
         final LinkedList<Long[]> snapshotList = new LinkedList<Long[]>();
 
+        // 每秒采集一次信息
         executorService.scheduleAtFixedRate(new TimerTask() {
             @Override
             public void run() {
@@ -95,6 +96,7 @@ public class Consumer {
             }
         }, 1000, 1000, TimeUnit.MILLISECONDS);
 
+        // 每10s打印一次统计信息(包含了计算过程)
         executorService.scheduleAtFixedRate(new TimerTask() {
             private void printStats() {
                 if (snapshotList.size() >= 10) {
