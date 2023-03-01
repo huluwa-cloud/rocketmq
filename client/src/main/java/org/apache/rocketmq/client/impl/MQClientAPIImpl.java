@@ -420,6 +420,15 @@ public class MQClientAPIImpl {
 
     }
 
+    /**
+     * 调用链：
+     * [org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl#send(org.apache.rocketmq.common.message.Message)] -->
+     * [org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl#send(org.apache.rocketmq.common.message.Message, long)] -->
+     * [org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl#sendDefaultImpl()] -->
+     * [org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl#sendKernelImpl()] -->
+     * [org.apache.rocketmq.client.impl.MQClientAPIImpl#sendMessage() 本方法]
+     *
+     */
     public SendResult sendMessage(
         final String addr,
         final String brokerName,
@@ -433,6 +442,12 @@ public class MQClientAPIImpl {
         return sendMessage(addr, brokerName, msg, requestHeader, timeoutMillis, communicationMode, null, null, null, 0, context, producer);
     }
 
+    /**
+     *
+     *
+     *
+     *
+     */
     public SendResult sendMessage(
         final String addr,
         final String brokerName,

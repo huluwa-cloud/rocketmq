@@ -132,7 +132,9 @@ public class DefaultMQProducerImpl implements MQProducerInner {
     public DefaultMQProducerImpl(final DefaultMQProducer defaultMQProducer, RPCHook rpcHook) {
         this.defaultMQProducer = defaultMQProducer;
         this.rpcHook = rpcHook;
-
+        /*
+         * 处理异步发送请求的默认线程池的任务队列，还是熟悉的LinkedBlockingQueue，队列大小为5w
+         */
         this.asyncSenderThreadPoolQueue = new LinkedBlockingQueue<Runnable>(50000);
         this.defaultAsyncSenderExecutor = new ThreadPoolExecutor(
             Runtime.getRuntime().availableProcessors(),
@@ -541,6 +543,10 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                             sendCallback.onException(e);
                         }
                     } else {
+                        /**
+                         * 异步投递的时候，线程池执行到这个投递任务的时候，已经超过了指定的timeout
+                         * 那么就会产生RemotingTooMuchRequestException，给到SendCallback回调接口。
+                         */
                         sendCallback.onException(
                             new RemotingTooMuchRequestException("DEFAULT ASYNC send call timeout"));
                     }
@@ -570,6 +576,14 @@ public class DefaultMQProducerImpl implements MQProducerInner {
 
     }
 
+    /**
+     *
+     * 调用链：
+     * [org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl#send(org.apache.rocketmq.common.message.Message)] -->
+     * [org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl#send(org.apache.rocketmq.common.message.Message, long)] -->
+     * [org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl#sendDefaultImpl() 本方法]
+     *
+     */
     private SendResult sendDefaultImpl(
         Message msg,
         final CommunicationMode communicationMode,
@@ -582,6 +596,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         long beginTimestampFirst = System.currentTimeMillis();
         long beginTimestampPrev = beginTimestampFirst;
         long endTimestamp = beginTimestampFirst;
+        // 根据topic找到路由的信息
         TopicPublishInfo topicPublishInfo = this.tryToFindTopicPublishInfo(msg.getTopic());
         if (topicPublishInfo != null && topicPublishInfo.ok()) {
             boolean callTimeout = false;
@@ -728,6 +743,17 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         }
     }
 
+    /**
+     *
+     * 调用链：
+     * [org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl#send(org.apache.rocketmq.common.message.Message)] -->
+     * [org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl#send(org.apache.rocketmq.common.message.Message, long)] -->
+     * [org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl#sendDefaultImpl()] -->
+     * [org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl#sendKernelImpl()]
+     *
+     *
+     *
+     */
     private SendResult sendKernelImpl(final Message msg,
         final MessageQueue mq,
         final CommunicationMode communicationMode,
@@ -735,6 +761,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         final TopicPublishInfo topicPublishInfo,
         final long timeout) throws MQClientException, RemotingException, MQBrokerException, InterruptedException {
         long beginStartTime = System.currentTimeMillis();
+        // 根据broker的名称找到broker的地址
         String brokerAddr = this.mQClientFactory.findBrokerAddressInPublish(mq.getBrokerName());
         if (null == brokerAddr) {
             tryToFindTopicPublishInfo(mq.getTopic());
@@ -1338,9 +1365,13 @@ public class DefaultMQProducerImpl implements MQProducerInner {
 
     /**
      * DEFAULT SYNC -------------------------------------------------------
+     *
+     * 默认是同步发送
+     * 调用链：
+     * [org.apache.rocketmq.client.producer.DefaultMQProducer#send(org.apache.rocketmq.common.message.Message)]
+     *
      */
-    public SendResult send(
-        Message msg) throws MQClientException, RemotingException, MQBrokerException, InterruptedException {
+    public SendResult send(Message msg) throws MQClientException, RemotingException, MQBrokerException, InterruptedException {
         return send(msg, this.defaultMQProducer.getSendMsgTimeout());
     }
 
@@ -1395,8 +1426,10 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         this.asyncSenderExecutor = asyncSenderExecutor;
     }
 
-    public SendResult send(Message msg,
-        long timeout) throws MQClientException, RemotingException, MQBrokerException, InterruptedException {
+    /**
+     *
+     */
+    public SendResult send(Message msg, long timeout) throws MQClientException, RemotingException, MQBrokerException, InterruptedException {
         return this.sendDefaultImpl(msg, CommunicationMode.SYNC, null, timeout);
     }
 

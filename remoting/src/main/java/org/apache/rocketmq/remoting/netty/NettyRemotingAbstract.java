@@ -71,6 +71,9 @@ public abstract class NettyRemotingAbstract {
 
     /**
      * This map caches all on-going requests.
+     *
+     * 缓存所有[发送但还没响应回来]的请求的map
+     *
      */
     protected final ConcurrentMap<Integer /* opaque */, ResponseFuture> responseTable =
         new ConcurrentHashMap<Integer, ResponseFuture>(256);

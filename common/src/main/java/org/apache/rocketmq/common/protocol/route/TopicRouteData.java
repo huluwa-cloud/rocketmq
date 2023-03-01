@@ -25,6 +25,13 @@ import java.util.HashMap;
 import java.util.List;
 import org.apache.rocketmq.remoting.protocol.RemotingSerializable;
 
+/**
+ * topic的路由信息抽象
+ *
+ * 注意：
+ * 1）一个TopicRouteData代表的是一个Topic的路由信息
+ * 2）这个TopicRouteData所在的包是common包，它是通用协议的一部分
+ */
 public class TopicRouteData extends RemotingSerializable {
     private String orderTopicConf;
     private List<QueueData> queueDatas;

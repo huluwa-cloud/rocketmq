@@ -255,6 +255,14 @@ public class MQClientInstance {
 
                     // Start various schedule tasks
                     // 在这里，启动一堆定时任务（由一个单线程线程池）执行。
+                    /*
+                     *
+                     * 任务都是由这个org.apache.rocketmq.client.impl.factory.MQClientInstance#scheduledExecutorService
+                     * 单线程的定时任务线程池去执行。
+                     *
+                     * 其中很重要的定时任务就是，每30s从nameserver那里获取一次topic信息和路由信息。
+                     *
+                     */
                     this.startScheduledTask();
 
                     // Start pull service
@@ -291,6 +299,8 @@ public class MQClientInstance {
             }, 1000 * 10, 1000 * 60 * 2, TimeUnit.MILLISECONDS);
         }
 
+        // ！！！！！！！！！！！！！client端极其重要的一个定时任务！！！！！！！！！！！！
+        // 定时更新client端的topic信息和路由信息
         // Client端，启动的时候，默认每30s，从Name Server拉取topic信息，并更新本地缓存
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
@@ -629,6 +639,20 @@ public class MQClientInstance {
         }
     }
 
+    /**
+     *  来自DefaultMQPushConsumer的调用链：
+     * 	at consumer.PushConsumer.main(PushConsumer.java:35) （自己创建的例子）
+     * 	at org.apache.rocketmq.client.consumer.DefaultMQPushConsumer.start(DefaultMQPushConsumer.java:706)
+     * 	at org.apache.rocketmq.client.impl.consumer.DefaultMQPushConsumerImpl.start(DefaultMQPushConsumerImpl.java:654)
+     * 	at org.apache.rocketmq.client.impl.consumer.DefaultMQPushConsumerImpl.updateTopicSubscribeInfoWhenSubscriptionChanged(DefaultMQPushConsumerImpl.java:871)
+     * 	at org.apache.rocketmq.client.impl.factory.MQClientInstance.updateTopicRouteInfoFromNameServer(MQClientInstance.java:509)
+     * 	at org.apache.rocketmq.client.impl.factory.MQClientInstance.updateTopicRouteInfoFromNameServer(MQClientInstance.java:679)
+     *
+     * @param topic
+     * @param isDefault
+     * @param defaultMQProducer
+     * @return
+     */
     public boolean updateTopicRouteInfoFromNameServer(final String topic, boolean isDefault,
         DefaultMQProducer defaultMQProducer) {
         try {

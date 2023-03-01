@@ -110,6 +110,12 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
      * Maximum number of retry to perform internally before claiming sending failure in synchronous mode. </p>
      *
      * This may potentially cause message duplication which is up to application developers to resolve.
+     *
+     * 这个东西，同步调用时才生效。
+     * 默认重试2次，也就是3次
+     *
+     * 异步的重试次数在下面
+     *
      */
     private int retryTimesWhenSendFailed = 2;
 
@@ -272,6 +278,8 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
     /**
      * Start this producer instance. </p>
      *
+     * 文档写明了，发送消息前，一定要先调用start方法，启动producer实例。
+     *
      * <strong> Much internal initializing procedures are carried out to make this instance prepared, thus, it's a must
      * to invoke this method before sending or querying messages. </strong> </p>
      *
@@ -281,7 +289,7 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
     public void start() throws MQClientException {
         this.setProducerGroup(withNamespace(this.producerGroup));
         this.defaultMQProducerImpl.start();
-        if (null != traceDispatcher) {
+        if (null != traceDispatcher) {  // 启用trace才有
             try {
                 traceDispatcher.start(this.getNamesrvAddr(), this.getAccessChannel());
             } catch (MQClientException e) {
@@ -327,6 +335,9 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
      * @throws RemotingException if there is any network-tier error.
      * @throws MQBrokerException if there is any error with broker.
      * @throws InterruptedException if the sending thread is interrupted.
+     *
+     *
+     *
      */
     @Override
     public SendResult send(

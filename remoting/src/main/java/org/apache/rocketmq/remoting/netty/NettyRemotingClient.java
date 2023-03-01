@@ -89,7 +89,19 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
     private final ConcurrentMap<String /* addr */, ChannelWrapper> channelTables = new ConcurrentHashMap<String, ChannelWrapper>();
 
     private final Timer timer = new Timer("ClientHouseKeepingService", true);
-
+    /**
+     * NettyRemotingClient是持有NameServer地址的
+     *
+     * 设置的调用链：
+     * 	  at org.apache.rocketmq.remoting.netty.NettyRemotingClient.updateNameServerAddressList(NettyRemotingClient.java:337)
+     * 	  at org.apache.rocketmq.client.impl.MQClientAPIImpl.updateNameServerAddressList(MQClientAPIImpl.java:237)
+     * 	  at org.apache.rocketmq.client.impl.factory.MQClientInstance.<init>(MQClientInstance.java:136)
+     * 	  at org.apache.rocketmq.client.impl.MQClientManager.getOrCreateMQClientInstance(MQClientManager.java:53)
+     * 	  at org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl.start(DefaultMQProducerImpl.java:201)
+     * 	  at org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl.start(DefaultMQProducerImpl.java:187)
+     * 	  at org.apache.rocketmq.client.producer.DefaultMQProducer.start(DefaultMQProducer.java:283)
+     *
+     */
     private final AtomicReference<List<String>> namesrvAddrList = new AtomicReference<List<String>>();
     private final AtomicReference<String> namesrvAddrChoosed = new AtomicReference<String>();
     private final AtomicInteger namesrvIndex = new AtomicInteger(initValueIndex());
@@ -345,6 +357,11 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         }
     }
 
+    /**
+     *
+     * 注意：
+     *
+     */
     @Override
     public void updateNameServerAddressList(List<String> addrs) {
         List<String> old = this.namesrvAddrList.get();
@@ -356,6 +373,11 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
             } else if (addrs.size() != old.size()) {
                 update = true;
             } else {
+                /*
+                 * 如果新旧的name server地址列表中，地址数量一样。
+                 * 那么就比对他们所包含的元素，是否一样。
+                 * 如果一样，那么就代表update是false，不需要有任何set操作。
+                 */
                 for (int i = 0; i < addrs.size() && !update; i++) {
                     if (!old.contains(addrs.get(i))) {
                         update = true;
@@ -364,10 +386,12 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
             }
 
             if (update) {
+                // 只是随机打乱list的元素顺序而已
                 Collections.shuffle(addrs);
                 log.info("name server address updated. NEW : {} , OLD: {}", addrs, old);
                 this.namesrvAddrList.set(addrs);
-
+                // 如果被选中的name server没存在于这个地址列表中，
+                // 那么就把原来的被选中的name server地址设置为null.
                 if (!addrs.contains(this.namesrvAddrChoosed.get())) {
                     this.namesrvAddrChoosed.set(null);
                 }
@@ -375,6 +399,11 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         }
     }
 
+    /**
+     * NettyRemotingClient被上层调用来往网络写数据的方法，其实就3个，方法名都是invoke_XXXX.
+     * 分别对应3种发送方式：同步、异步、单向
+     * invokeSync、invokeAsync、invokeOneway
+     */
     @Override
     public RemotingCommand invokeSync(String addr, final RemotingCommand request, long timeoutMillis)
         throws InterruptedException, RemotingConnectException, RemotingSendRequestException, RemotingTimeoutException {
@@ -401,6 +430,10 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
                 this.closeChannel(addr, channel);
                 throw e;
             } catch (RemotingTimeoutException e) {
+                /*
+                 * 发送超时了，是否要把信道close.
+                 * 默认配置是true，要关掉。
+                 */
                 if (nettyClientConfig.isClientCloseSocketIfTimeout()) {
                     this.closeChannel(addr, channel);
                     log.warn("invokeSync: close socket because of timeout, {}ms, {}", timeoutMillis, addr);
@@ -431,9 +464,17 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         return this.createChannel(addr);
     }
 
+    /**
+     *
+     * 专门用于获取和创建与 Name Server的连接信道的。
+     * 只在同类的getAndCreateChannel方法中被调用了。
+     *
+     */
     private Channel getAndCreateNameserverChannel() throws RemotingConnectException, InterruptedException {
         String addr = this.namesrvAddrChoosed.get();
         if (addr != null) {
+            // 先根据地址判断[信道表]中有没有
+            // 如果有，又判断这个信道是否存活
             ChannelWrapper cw = this.channelTables.get(addr);
             if (cw != null && cw.isOK()) {
                 return cw.getChannel();
@@ -452,6 +493,10 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
                 }
 
                 if (addrList != null && !addrList.isEmpty()) {
+                    /**
+                     * addrList就是NameServer地址列表，可以有多个。
+                     *
+                     */
                     for (int i = 0; i < addrList.size(); i++) {
                         // namesrvIndex的初始值是一个随机数，然后mod 999，也就是限制在999之内。
                         int index = this.namesrvIndex.incrementAndGet();
@@ -462,10 +507,12 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
                         this.namesrvAddrChoosed.set(newAddr);
                         log.info("new name server is chosen. OLD: {} , NEW: {}. namesrvIndex = {}", addr, newAddr, namesrvIndex);
                         Channel channelNew = this.createChannel(newAddr);
+                        // 返回的Channel为null，就是没有建立到连接
                         if (channelNew != null) {
                             return channelNew;
                         }
                     }
+                    // 遍历了所有的Name Server地址，尝试连接，都连接不上，那就抛出RemotingConnectException
                     throw new RemotingConnectException(addrList.toString());
                 }
             } finally {
@@ -552,6 +599,11 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         return null;
     }
 
+    /**
+     * NettyRemotingClient被上层调用来往网络写数据的方法，其实就3个，方法名都是invoke_XXXX.
+     * 分别对应3种发送方式：同步、异步、单向
+     * invokeSync、invokeAsync、invokeOneway
+     */
     @Override
     public void invokeAsync(String addr, RemotingCommand request, long timeoutMillis, InvokeCallback invokeCallback)
         throws InterruptedException, RemotingConnectException, RemotingTooMuchRequestException, RemotingTimeoutException,
@@ -580,6 +632,11 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         }
     }
 
+    /**
+     * NettyRemotingClient被上层调用来往网络写数据的方法，其实就3个，方法名都是invoke_XXXX.
+     * 分别对应3种发送方式：同步、异步、单向
+     * invokeSync、invokeAsync、invokeOneway
+     */
     @Override
     public void invokeOneway(String addr, RemotingCommand request, long timeoutMillis) throws InterruptedException,
         RemotingConnectException, RemotingTooMuchRequestException, RemotingTimeoutException, RemotingSendRequestException {
