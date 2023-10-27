@@ -64,6 +64,9 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
 
     /**
      * Wrapping internal implementations for virtually all methods presented in this class.
+     *
+     * 文档都写明了：所有在DefaultMQProducer这个类中呈现的方法， DefaultMQProducerImpl是它的内在实现
+     *
      */
     protected final transient DefaultMQProducerImpl defaultMQProducerImpl;
     private final InternalLogger log = ClientLogger.getLog();

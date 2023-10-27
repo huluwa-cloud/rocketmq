@@ -132,7 +132,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
     public DefaultMQProducerImpl(final DefaultMQProducer defaultMQProducer, RPCHook rpcHook) {
         this.defaultMQProducer = defaultMQProducer;
         this.rpcHook = rpcHook;
-        /*
+        /**
          * 处理异步发送请求的默认线程池的任务队列，还是熟悉的LinkedBlockingQueue，队列大小为5w
          */
         this.asyncSenderThreadPoolQueue = new LinkedBlockingQueue<Runnable>(50000);
