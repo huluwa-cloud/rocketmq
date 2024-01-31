@@ -417,20 +417,25 @@ public class MQClientInstance {
     }
 
     /**
+     *
+     * 清除掉离线的broker
+     *
      * Remove offline broker
      */
     private void cleanOfflineBroker() {
         try {
             if (this.lockNamesrv.tryLock(LOCK_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS))
                 try {
+                    // 更新后的broker地址表
                     ConcurrentHashMap<String, HashMap<Long, String>> updatedTable = new ConcurrentHashMap<String, HashMap<Long, String>>();
 
                     Iterator<Entry<String, HashMap<Long, String>>> itBrokerTable = this.brokerAddrTable.entrySet().iterator();
                     while (itBrokerTable.hasNext()) {
                         Entry<String, HashMap<Long, String>> entry = itBrokerTable.next();
                         String brokerName = entry.getKey();
+                        // brokerid --> address
                         HashMap<Long, String> oneTable = entry.getValue();
-
+                        //
                         HashMap<Long, String> cloneAddrTable = new HashMap<Long, String>();
                         cloneAddrTable.putAll(oneTable);
 
@@ -439,6 +444,7 @@ public class MQClientInstance {
                             Entry<Long, String> ee = it.next();
                             String addr = ee.getValue();
                             if (!this.isBrokerAddrExistInTopicRouteTable(addr)) {
+                                // 如果broker地址不存在于topic的路由表了，那就判定这个broker地址已经离线了。
                                 it.remove();
                                 log.info("the broker addr[{} {}] is offline, remove it", brokerName, addr);
                             }
@@ -502,11 +508,13 @@ public class MQClientInstance {
     }
 
     public void sendHeartbeatToAllBrokerWithLock() {
+        // 发送心跳为什么要加锁？
         if (this.lockHeartbeat.tryLock()) {
             try {
                 this.sendHeartbeatToAllBroker();
                 this.uploadFilterClassSource();
             } catch (final Exception e) {
+                // 其实，发送心跳失败，也只是打日志而已。不会把异常再往外抛。
                 log.error("sendHeartbeatToAllBroker exception", e);
             } finally {
                 this.lockHeartbeat.unlock();
@@ -568,6 +576,7 @@ public class MQClientInstance {
         final HeartbeatData heartbeatData = this.prepareHeartbeatData();
         final boolean producerEmpty = heartbeatData.getProducerDataSet().isEmpty();
         final boolean consumerEmpty = heartbeatData.getConsumerDataSet().isEmpty();
+        // 就算没有consumer和producer，也会发送心跳，不过会打warn日志.
         if (producerEmpty && consumerEmpty) {
             log.warn("sending heartbeat, but no consumer and no producer. [{}]", this.clientId);
             return;
@@ -576,6 +585,7 @@ public class MQClientInstance {
         if (!this.brokerAddrTable.isEmpty()) {
             long times = this.sendHeartbeatTimesTotal.getAndIncrement();
             Iterator<Entry<String, HashMap<Long, String>>> it = this.brokerAddrTable.entrySet().iterator();
+            // 遍历broker地址表，逐个broker发送心跳
             while (it.hasNext()) {
                 Entry<String, HashMap<Long, String>> entry = it.next();
                 String brokerName = entry.getKey();
@@ -596,11 +606,12 @@ public class MQClientInstance {
                                     this.brokerVersionTable.put(brokerName, new HashMap<String, Integer>(4));
                                 }
                                 this.brokerVersionTable.get(brokerName).put(addr, version);
-                                if (times % 20 == 0) {
+                                if (times % 20 == 0) {  // 相当于每10分钟，打印一次心跳日志
                                     log.info("send heart beat to broker[{} {} {}] success", brokerName, id, addr);
                                     log.info(heartbeatData.toString());
                                 }
-                            } catch (Exception e) {
+                            } catch (Exception e) { // 但凡涉及到远程调用处理的，都需要显式得处理异常。
+
                                 if (this.isBrokerInNameServer(addr)) {
                                     log.info("send heart beat to broker[{} {} {}] failed", brokerName, id, addr, e);
                                 } else {
@@ -743,6 +754,9 @@ public class MQClientInstance {
         return false;
     }
 
+    /**
+     * 创建心跳数据
+     */
     private HeartbeatData prepareHeartbeatData() {
         HeartbeatData heartbeatData = new HeartbeatData();
 

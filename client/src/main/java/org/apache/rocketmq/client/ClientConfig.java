@@ -30,6 +30,9 @@ import org.apache.rocketmq.remoting.netty.TlsSystemConfig;
 import org.apache.rocketmq.remoting.protocol.LanguageCode;
 
 /**
+ *
+ * 客户端通用的配置
+ *
  * Client Common configuration
  */
 public class ClientConfig {
@@ -47,14 +50,17 @@ public class ClientConfig {
 
     /**
      * Pulling topic information interval from the named server
+     * 从name server获取topic信息的时间间隔，30s
      */
     private int pollNameServerInterval = 1000 * 30;
     /**
      * Heartbeat interval in microseconds with message broker
+     * 和message broker之间心跳的时间间隔，30s
      */
     private int heartbeatBrokerInterval = 1000 * 30;
     /**
      * Offset persistent interval for consumer
+     * consumer持久化offer的时间间隔，5s
      */
     private int persistConsumerOffsetInterval = 1000 * 5;
     private long pullTimeDelayMillsWhenException = 1000;

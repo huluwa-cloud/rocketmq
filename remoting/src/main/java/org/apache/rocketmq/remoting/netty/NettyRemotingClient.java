@@ -84,7 +84,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
      *
      * ！！！！！！！！！！！！缓存信道（连接）的容器！！！！！！！！！！！！
      * 非常核心重要的一个数据结构
-     *
+     * 额...其实，就是本地路由表。我写[收银机]和[智能柜]项目，都有这样一个数据结构。Value一定是[信道对象]。
      */
     private final ConcurrentMap<String /* addr */, ChannelWrapper> channelTables = new ConcurrentHashMap<String, ChannelWrapper>();
 
@@ -701,6 +701,16 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         this.callbackExecutor = callbackExecutor;
     }
 
+    /**
+     * 哈哈，我自己做长连接项目也有这样的[信道Wrapper]设计。很自然而然的设计。
+     * 因为原生底层的信道对象该有的能力都有，但是有些时候
+     * 1）用起来不够顺手
+     * 2）携带的信息尚不能满足业务需要（我可能需要拿到信道对象的时候，需要更多的信息）。
+     * 这个时候，就设计Wrapper包一层，在原生信道对象基础上扩展更多的信息。
+     *
+     * 这里只是针对1）的问题做了处理而已，没有2）的原因。但我觉得这是为了给以后做扩展，提前设计了Wrapper。
+     *
+     */
     static class ChannelWrapper {
         private final ChannelFuture channelFuture;
 
